@@ -3,8 +3,11 @@
 
 #include <string>
 #include <vector>
+#include <stdexcept>  // runtime_error
 
-#include "../athena.hpp"
+#include "../athena.hpp"             // Real
+#include "../athena_arrays.hpp"      // AthenaArray
+#include "../utils/interp_table.hpp" // InterpTable2D
 
 void MesaReader(const char *filename, std::vector<std::string> &headers,
                 std::vector<std::string> &hdata, std::vector<std::string> &vars,
