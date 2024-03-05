@@ -66,6 +66,8 @@ Real arad;
 Real kb;
 Real mp;
 
+Real energy_alpha;
+
 } // namespace
 
 void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
@@ -87,6 +89,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Real GM = pin->GetReal("problem", "GM");
   Real mass = pin->GetReal("problem", "mass");
   Real GM_cgs = mass * Constants::solar_mass_cgs * Constants::grav_const_cgs;
+  energy_alpha = pin->GetReal("problem", "energy_alpha");
 
   clight = Constants::speed_of_light_cgs;
   kb = Constants::k_boltzmann_cgs;
@@ -256,11 +259,11 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         phydro->u(IM3,k,j,i) = 0.0;
 
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
-        Real temp = mesa_in(PRAD, i) / rho;
-        Real Er = std::pow(temp, 4.0);
+        Real Er = 3.0 * mesa_in(PRAD, i);
+        Real temp = std::pow(Er, 0.25);
 
         if (NON_BAROTROPIC_EOS) {
-          phydro->u(IEN,k,j,i) = mesa_in(PGAS, i) / (gamma - 1.0);
+          phydro->u(IEN,k,j,i) = rho * temp / (gamma - 1.0);
           phydro->u(IEN, k, j, i) += 0.5 * SQR(phydro->u(IM1, k, j, i)) / rho;
           phydro->u(IEN, k, j, i) += 0.5 * SQR(phydro->u(IM2, k, j, i)) / rho;
           phydro->u(IEN, k, j, i) += 0.5 * SQR(phydro->u(IM3, k, j, i)) / rho;
@@ -319,25 +322,32 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
   NRRadiation *pnrrad = pmb->pnrrad;
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
-      for (int i=1; i<=ngh; ++i) {
+
+      // Calculate energy density in first active zone
+      Real Er_above = 0.0;
+      for (int n=0; n < pnrrad->nang; n++) {
+        Er_above += pnrrad->ir(k,j,il,n) * pnrrad->wmu(n);
+      }
+
+      for (int i=il-1; i>=il-NGHOST; --i) {
+        Real x1v = pco->x1v(i);
+        Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
+        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
+        Real Er = energy_alpha * Er_above + 3.0 * Fr * tau_avg;
+        Real temp = std::pow(Er, 0.25);
+
         for (int n=0; n<=NHYDRO; n++) {
           if (n == IDN) {
-            prim(n, k, j, il-i) = mesa_in(RHO, il-i);
+            prim(n, k, j, i) = mesa_in(RHO, i);
           } else if (n == IPR) {
-
-            // Calculate energy density in this zone
-            Real Er = 0.0;
-            for (int n=0; n < pnrrad->nang; n++) {
-              Er += pnrrad->ir(k,j,il-i,n) * pnrrad->wmu(n);
-            }
-            prim(n, k, j, il-i) = prim(IDN,k,j,il-i) * std::pow(Er, 0.25);
-
+            prim(n, k, j, i) = mesa_in(RHO, i) * temp;
           } else if (n == IVX) {
-            prim(n, k, j, il-i) = mesa_in(VELOCITY, il-i);
+            prim(n, k, j, i) = mesa_in(VELOCITY, i);
           } else {
-            prim(n, k, j, il-i) = prim(n, k, j, il);
+            prim(n, k, j, i) = prim(n, k, j, il);
           }
         }
+        Er_above = Er;
       }
     }
   }
@@ -350,7 +360,6 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
                 int ke, int ngh) {
 
   Real gamma = pmb->peos->GetGamma();
-
 
   for (int k = ks; k <= ke; ++k) {
     for (int j = js; j <= je; ++j) {
@@ -365,7 +374,7 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
         Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
-        Real Er = Er_above + 3.0 * Fr * tau_avg;
+        Real Er = energy_alpha * Er_above + 3.0 * Fr * tau_avg;
 
         Real *lab_ir = &(ir(k, j, i, 0));
         Real *mu     = &(pnrrad->mu(0, k, j, i, 0));
