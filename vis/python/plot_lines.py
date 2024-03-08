@@ -33,6 +33,7 @@ def main(**kwargs):
     labels = kwargs['labels']
     x_log = kwargs['x_log']
     y_log = kwargs['y_log']
+    y_symlog = kwargs['y_symlog']
     x_min = kwargs['x_min']
     x_max = kwargs['x_max']
     y_min = kwargs['y_min']
@@ -125,6 +126,8 @@ def main(**kwargs):
         plt.xscale('log')
     if y_log:
         plt.yscale('log')
+    if y_symlog:
+        plt.yscale('symlog')
     plt.xlim((x_min, x_max))
     plt.ylim((y_min, y_max))
     if x_label is not None:
@@ -189,6 +192,10 @@ if __name__ == '__main__':
         '--y_log',
         action='store_true',
         help='flag indicating y-axis should be log scaled')
+    parser.add_argument(
+        '--y_symlog',
+        action='store_true',
+        help='flag indicating y-axis should be symmetric log scaled')
     parser.add_argument('--x_min',
                         type=float,
                         help='minimum for x-axis')

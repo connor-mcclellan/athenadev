@@ -185,7 +185,7 @@ void IMRadiation::Iteration(
     for(int nb=0; nb<pm->nblocal; ++nb) {
       pmb = pm->my_blocks(nb);
       NRRadiation *prad = pmb->pnrrad;
-      if (prad->set_source_flag > 0)
+      //if (prad->set_source_flag > 0)
         prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir1, prad->ir);
     }
 

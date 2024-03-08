@@ -129,6 +129,8 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   AllocateUserOutputVariables(Uov::NUM_UOV);
 
   // Output variables that are not angle dependent - one output per timestep
+  SetUserOutputVariableName(Uov::DIVFLX_SUM, "divflx_sum");
+  SetUserOutputVariableName(Uov::INITFLX_SUM, "initflx_sum");
   SetUserOutputVariableName(Uov::TAU, "tau");
   SetUserOutputVariableName(Uov::GRAV, "grav");
   SetUserOutputVariableName(Uov::RADSRC, "radsrc");
@@ -223,7 +225,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
       }
     }
     for (int l=0; l<NUM_MESA; ++l) {
-      mesa_in(l,i) = (1.0-fraction)*mesa_og(l,n-1) + fraction*mesa_og(l,n);
+      mesa_in(l,i) = (fraction)*mesa_og(l,n-1) + (1.0-fraction)*mesa_og(l,n);
     }
   }
   mesa_og.DeleteAthenaArray();
@@ -259,11 +261,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         phydro->u(IM3,k,j,i) = 0.0;
 
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
-        Real Er = 3.0 * mesa_in(PRAD, i);
-        Real temp = std::pow(Er, 0.25);
+        //Real Er = 3.0 * mesa_in(PRAD, i);
+        //Real temp = std::pow(Er, 0.25);
+        Real temp = mesa_in(PGAS, i) / rho;
+        Real Er = std::pow(temp, 4.0);
 
         if (NON_BAROTROPIC_EOS) {
-          phydro->u(IEN,k,j,i) = rho * temp / (gamma - 1.0);
+          phydro->u(IEN,k,j,i) = mesa_in(PGAS, i) / (gamma - 1.0);
           phydro->u(IEN, k, j, i) += 0.5 * SQR(phydro->u(IM1, k, j, i)) / rho;
           phydro->u(IEN, k, j, i) += 0.5 * SQR(phydro->u(IM2, k, j, i)) / rho;
           phydro->u(IEN, k, j, i) += 0.5 * SQR(phydro->u(IM3, k, j, i)) / rho;
@@ -329,7 +333,7 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         Er_above += pnrrad->ir(k,j,il,n) * pnrrad->wmu(n);
       }
 
-      for (int i=il-1; i>=il-NGHOST; --i) {
+      for (int i=il-1; i>=il-ngh; --i) {
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
         Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
@@ -340,7 +344,7 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
           if (n == IDN) {
             prim(n, k, j, i) = mesa_in(RHO, i);
           } else if (n == IPR) {
-            prim(n, k, j, i) = mesa_in(RHO, i) * temp;
+            prim(n, k, j, i) = mesa_in(PGAS, i);
           } else if (n == IVX) {
             prim(n, k, j, i) = mesa_in(VELOCITY, i);
           } else {
@@ -370,7 +374,7 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
         Er_above += ir(k,j,is,n) * pnrrad->wmu(n);
       }
 
-      for (int i=is-1; i>=is-NGHOST; --i) {
+      for (int i=is-1; i>=is-ngh; --i) {
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
         Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
