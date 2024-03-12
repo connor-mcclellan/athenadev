@@ -433,6 +433,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
   int is = pmb->is; int js = pmb->js; int ks = pmb->ks;
   int ie = pmb->ie; int je = pmb->je; int ke = pmb->ke;
 
+
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
       for (int i=is; i<=ie; ++i) {
@@ -444,14 +445,29 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
           Real fry_fr = 0.0;
           Real frz_fr = 0.0;
           if (IM_RADIATION_ENABLED) {
+
+            // Zero the UOV outputs
+            pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i) = 0.0;
+            pmb->ruser_meshblock_data[Uov::ANGFLX_SUM](k,j,i) = 0.0;
+            pmb->ruser_meshblock_data[Uov::INITFLX_SUM](k,j,i) = 0.0;
+            pmb->ruser_meshblock_data[Uov::RADSRC](k,j,i) = 0.0;
+            for (int n=0; n<nang; ++n) {
+              pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i) = 0.0;
+              pmb->ruser_meshblock_data[Uov::ANGFLX_0+n](k,j,i) = 0.0;
+            }
+
+
             for (int n=0; n<nang; ++n) {
               Real ir_weight = p_ir0[n];
               ir_weight += divflx_(k,j,i,ifr*nang+n);
-              pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i) = divflx_(k,j,i,ifr*nang+n) * prad->wmu(n) - const_coef_(k,j,i,ifr*nang+n)*ir(k,j,i,ifr*nang+n) * prad->wmu(n);
-              pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i) += pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i);
+              pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i) = divflx_(k,j,i,ifr*nang+n) * prad->wmu(n) * prad->mu(n) - const_coef_(k,j,i,ifr*nang+n)*ir(k,j,i,ifr*nang+n)*prad->wmu(n)*prad->mu(n);
+              pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i) += pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i) / pmb->pmy_mesh->dt;
+              if (i==2)
+                printf("divflx_sum (n=%d): %g\n", n, pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i));
               if (prad->angle_flag == 1) {
                 ir_weight += ang_flx_(k,j,i,ifr*nang+n);
-                pmb->ruser_meshblock_data[Uov::ANGFLX_0+n](k,j,i) = ang_flx_(k,j,i,ifr*nang+n) * prad->wmu(n);
+                pmb->ruser_meshblock_data[Uov::ANGFLX_0+n](k,j,i) = ang_flx_(k,j,i,ifr*nang+n) * prad->wmu(n)*prad->mu(n);
+                pmb->ruser_meshblock_data[Uov::ANGFLX_SUM](k,j,i) += 1./pmb->pmy_mesh->dt * (ang_flx_(k,j,i,ifr*nang+n) * prad->wmu(n)*prad->mu(n) - imp_ang_coef_(k,j,i,n)*ir(k,j,i,ifr*nang+n) * prad->wmu(n)*prad->mu(n));
                 ir_weight -= ((imp_ang_coef_(k,j,i,n))
                            * ir(k,j,i,ifr*nang+n));
                 pmb->ruser_meshblock_data[Uov::IMPANG_0+n](k,j,i) = imp_ang_coef_(k,j,i,n)*ir(k,j,i,ifr*nang+n) * prad->wmu(n);
@@ -516,7 +532,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
 
         // Now apply the radiation source terms to gas with energy and
         // momentum conservation
-        pmb->ruser_meshblock_data[Uov::RADSRC](k,j,i) = delta_frx;
+        pmb->ruser_meshblock_data[Uov::RADSRC](k,j,i) = -prat*delta_frx*invredc/pmb->pmy_mesh->dt;
         rad_source(0,k,j,i) = (-prat*delta_er  * invredfactor);
         rad_source(1,k,j,i) = (-prat*delta_frx * invredc);
         rad_source(2,k,j,i) = (-prat*delta_fry * invredc);

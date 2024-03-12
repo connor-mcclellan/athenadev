@@ -129,10 +129,13 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   AllocateUserOutputVariables(Uov::NUM_UOV);
 
   // Output variables that are not angle dependent - one output per timestep
+  SetUserOutputVariableName(Uov::CSOUND, "csound");
+  SetUserOutputVariableName(Uov::GRAD_P, "grad_P");
+  SetUserOutputVariableName(Uov::ANGFLX_SUM, "angflx_sum");
   SetUserOutputVariableName(Uov::DIVFLX_SUM, "divflx_sum");
   SetUserOutputVariableName(Uov::INITFLX_SUM, "initflx_sum");
   SetUserOutputVariableName(Uov::TAU, "tau");
-  SetUserOutputVariableName(Uov::GRAV, "grav");
+  SetUserOutputVariableName(Uov::GRAVSRC, "gravsrc");
   SetUserOutputVariableName(Uov::RADSRC, "radsrc");
 
   // Output variables that are angle dependent - nang outputs per timestep
@@ -232,17 +235,70 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
 } // InitUserMeshblockData
 
 void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
+
+  AthenaArray<Real> &x1flux = phydro->flux[X1DIR];
+
   // Copy over meshblock data for user output variables
   for (int k = ks; k <= ke; k++) {
     for (int j = js; j <= je; j++) {
       for (int i = is - NGHOST; i <= ie + NGHOST; i++) {
         for (int l = 0; l < Uov::NUM_UOV; l++) {
-          user_out_var(l, k, j, i) = ruser_meshblock_data[l](k, j, i);
+
+          if ((l==Uov::GRAD_P) || (l==Uov::CSOUND)) {
+            if ((i!=0) && (i!=ie+NGHOST)) {
+              // Numerical estimate of the change in pressure across this cell
+              Real press_l = phydro->w(IPR,k,j,i-1);
+              Real press_c = phydro->w(IPR,k,j,i);
+              Real press_r = phydro->w(IPR,k,j,i+1);
+              Real diff_P = 0.5*(press_r+press_c) - 0.5*(press_c+press_l);
+
+              if (l==Uov::GRAD_P) {
+                user_out_var(Uov::GRAD_P,k,j,i) = diff_P / pcoord->dx1f(i) / pmy_mesh->dt; // Pressure gradient force
+              } else if (l==Uov::CSOUND) {
+                Real rho_l = phydro->w(IDN,k,j,i-1);
+                Real rho_c = phydro->w(IDN,k,j,i);
+                Real rho_r = phydro->w(IDN,k,j,i+1);
+                Real diff_rho = 0.5*(rho_r+rho_c) - 0.5*(rho_c+rho_l);
+                user_out_var(Uov::CSOUND,k,j,i) = std::sqrt(diff_P / diff_rho); // Sound speed
+              }
+            } else {
+              user_out_var(Uov::GRAD_P,k,j,i) = 0.0;
+              user_out_var(Uov::CSOUND,k,j,i) = 0.0;
+            }
+          } else if (l==Uov::GRAVSRC) {
+            Real rho = phydro->u(IDN, k, j, i);
+            Real mx = phydro->u(IM1, k, j, i);
+            Real my = phydro->u(IM2, k, j, i);
+            Real mz = phydro->u(IM3, k, j, i);
+
+            // Left and right cell faces
+            Real rl = pcoord->x1f(i);
+            Real rr = pcoord->x1f(i + 1);
+            Real rc = pcoord->x1v(i);
+
+            // Gravitational parameter
+            Real gm = SQR(pnrrad->crat);
+
+            // Gravitational potential
+            Real phil = -gm/rl;
+            Real phir = -gm/rr;
+
+            // Source term - force per unit volume
+            Real dt = pmy_mesh->dt;
+            Real src = - dt * rho * (phir - phil) / (rr - rl);
+
+            // Momentum change per timestep due to gravity
+            user_out_var(Uov::GRAVSRC, k, j, i) = src / dt;
+
+          } else {
+            user_out_var(l, k, j, i) = ruser_meshblock_data[l](k, j, i);
+          }
         }
       }
     }
   }
 } // UserWorkBeforeOutput
+
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
@@ -337,7 +393,7 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
         Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
-        Real Er = energy_alpha * Er_above + 3.0 * Fr * tau_avg;
+        Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
         Real temp = std::pow(Er, 0.25);
 
         for (int n=0; n<=NHYDRO; n++) {
@@ -378,7 +434,7 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
         Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
-        Real Er = energy_alpha * Er_above + 3.0 * Fr * tau_avg;
+        Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
 
         Real *lab_ir = &(ir(k, j, i, 0));
         Real *mu     = &(pnrrad->mu(0, k, j, i, 0));
