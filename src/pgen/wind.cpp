@@ -364,7 +364,8 @@ void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
           kappa_ff /= kappa0;
 
           // Scattering opacity
-          Real kappa_s = 1. / (1. + std::pow(temp * temp0 / 4.5e8, 0.86));
+          //Real kappa_s = 1. / (1. + std::pow(temp * temp0 / 4.5e8, 0.86));
+          Real kappa_s = 1.0;
 
           // Set all the matter-radiation coupling coefficients
           pnrrad->sigma_s(k, j, i, ifr) = rho * kappa_s;
