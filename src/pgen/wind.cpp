@@ -253,7 +253,7 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
               Real diff_P = 0.5*(press_r+press_c) - 0.5*(press_c+press_l);
 
               if (l==Uov::GRAD_P) {
-                user_out_var(Uov::GRAD_P,k,j,i) = diff_P / pcoord->dx1f(i) / pmy_mesh->dt; // Pressure gradient force
+                user_out_var(Uov::GRAD_P,k,j,i) = diff_P / pcoord->dx1f(i); // Pressure gradient force
               } else if (l==Uov::CSOUND) {
                 Real rho_l = phydro->w(IDN,k,j,i-1);
                 Real rho_c = phydro->w(IDN,k,j,i);
@@ -290,6 +290,9 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
             // Momentum change per timestep due to gravity
             user_out_var(Uov::GRAVSRC, k, j, i) = src / dt;
 
+          } else if ((l==Uov::TAU) && (i != ie+NGHOST)) {
+            Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pcoord->dx1v(i);
+            user_out_var(l,k,j,i) = tau_avg;
           } else {
             user_out_var(l, k, j, i) = ruser_meshblock_data[l](k, j, i);
           }
@@ -400,7 +403,7 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
           if (n == IDN) {
             prim(n, k, j, i) = mesa_in(RHO, i);
           } else if (n == IPR) {
-            prim(n, k, j, i) = mesa_in(PGAS, i);
+            prim(n, k, j, i) = mesa_in(RHO, i) * temp;
           } else if (n == IVX) {
             prim(n, k, j, i) = mesa_in(VELOCITY, i);
           } else {

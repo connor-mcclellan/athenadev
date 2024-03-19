@@ -462,8 +462,8 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
               ir_weight += divflx_(k,j,i,ifr*nang+n);
               pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i) = divflx_(k,j,i,ifr*nang+n) * prad->wmu(n) * prad->mu(n) - const_coef_(k,j,i,ifr*nang+n)*ir(k,j,i,ifr*nang+n)*prad->wmu(n)*prad->mu(n);
               pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i) += pmb->ruser_meshblock_data[Uov::DIVFLX_0+n](k,j,i) / pmb->pmy_mesh->dt;
-              if (i==2)
-                printf("divflx_sum (n=%d): %g\n", n, pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i));
+              //if (i==2)
+              //  printf("divflx_sum (n=%d): %g\n", n, pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i));
               if (prad->angle_flag == 1) {
                 ir_weight += ang_flx_(k,j,i,ifr*nang+n);
                 pmb->ruser_meshblock_data[Uov::ANGFLX_0+n](k,j,i) = ang_flx_(k,j,i,ifr*nang+n) * prad->wmu(n)*prad->mu(n);
