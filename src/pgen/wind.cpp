@@ -138,21 +138,6 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   SetUserOutputVariableName(Uov::GRAVSRC, "gravsrc");
   SetUserOutputVariableName(Uov::RADSRC, "radsrc");
 
-  // Output variables that are angle dependent - nang outputs per timestep
-  // This loop sets all the user output variable names for each angle, 0 through nang
-  std::string names[6] = {"divflx", "angflx", "impang", "constcoef", "initflx", "finalflx"};
-  std::stringstream stream;
-  for (int m=0; m < 6; m++) {
-    for (int n=0; n < pnrrad->nang; n++) {
-      stream.clear(); // clear the error state
-      stream.str(std::string()); // clear the contents
-      stream << names[m] << "_" << n;
-      std::string mystring = stream.str();
-      int outvar_index = Uov::RADSRC + 1 + m*pnrrad->nang + n;
-      SetUserOutputVariableName(outvar_index, mystring.c_str());
-    }
-  }
-
   // MESA DATA I/O
   // =============
 
@@ -238,33 +223,29 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
 
   AthenaArray<Real> &x1flux = phydro->flux[X1DIR];
 
+  Real gamma = peos->GetGamma();
+
   // Copy over meshblock data for user output variables
   for (int k = ks; k <= ke; k++) {
     for (int j = js; j <= je; j++) {
       for (int i = is - NGHOST; i <= ie + NGHOST; i++) {
         for (int l = 0; l < Uov::NUM_UOV; l++) {
 
-          if ((l==Uov::GRAD_P) || (l==Uov::CSOUND)) {
+          if (l==Uov::GRAD_P) {
             if ((i!=0) && (i!=ie+NGHOST)) {
               // Numerical estimate of the change in pressure across this cell
               Real press_l = phydro->w(IPR,k,j,i-1);
               Real press_c = phydro->w(IPR,k,j,i);
               Real press_r = phydro->w(IPR,k,j,i+1);
               Real diff_P = 0.5*(press_r+press_c) - 0.5*(press_c+press_l);
-
-              if (l==Uov::GRAD_P) {
-                user_out_var(Uov::GRAD_P,k,j,i) = diff_P / pcoord->dx1f(i); // Pressure gradient force
-              } else if (l==Uov::CSOUND) {
-                Real rho_l = phydro->w(IDN,k,j,i-1);
-                Real rho_c = phydro->w(IDN,k,j,i);
-                Real rho_r = phydro->w(IDN,k,j,i+1);
-                Real diff_rho = 0.5*(rho_r+rho_c) - 0.5*(rho_c+rho_l);
-                user_out_var(Uov::CSOUND,k,j,i) = std::sqrt(diff_P / diff_rho); // Sound speed
-              }
+              user_out_var(Uov::GRAD_P,k,j,i) = diff_P / pcoord->dx1f(i); // Pressure gradient force
             } else {
               user_out_var(Uov::GRAD_P,k,j,i) = 0.0;
-              user_out_var(Uov::CSOUND,k,j,i) = 0.0;
             }
+          } else if (l==Uov::CSOUND) {
+            Real rho = phydro->u(IDN, k, j, i);
+            Real press = phydro->w(IPR,k,j,i);
+            user_out_var(Uov::CSOUND,k,j,i) = std::sqrt(gamma * press / rho);
           } else if (l==Uov::GRAVSRC) {
             Real rho = phydro->u(IDN, k, j, i);
             Real mx = phydro->u(IM1, k, j, i);
@@ -369,7 +350,7 @@ void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
 
           // Set all the matter-radiation coupling coefficients
           pnrrad->sigma_s(k, j, i, ifr) = rho * kappa_s;
-          pnrrad->sigma_a(k, j, i, ifr) = 0.0;
+          pnrrad->sigma_a(k, j, i, ifr) = rho * kappa_ff * 0.1;
           pnrrad->sigma_p(k, j, i, ifr) = rho * kappa_ff;
           pnrrad->sigma_pe(k, j, i, ifr) = rho * kappa_ff;
         }
