@@ -25,7 +25,7 @@ namespace Uov {
 //print(text)
 
 // User output variables
-enum {CSOUND, GRAD_P, ANGFLX_SUM, DIVFLX_SUM, INITFLX_SUM, TAU, GRAVSRC, RADSRC, NUM_UOV};
+enum {CSOUND, GRAD_P, ANGFLX_SUM, DIVFLX_SUM, INITFLX_SUM, TAU, GRAVSRC, RADSRC, MESAFLUX, NUM_UOV};
 }
 
 #endif // GLOBALS_HPP_

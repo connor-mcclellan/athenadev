@@ -132,6 +132,7 @@ void MesaReader(const char *filename, std::vector<std::string> &headers,
 
   // Now parse the data block
   data.resize(npos * nvar, 0.0); // resize is needed rather than reserve, so that the vector contains a nonzero number of items
+  stream.precision(17);
   for (int m = 0; m < npos; m++) {
     std::getline(file, line);
     stream.clear();

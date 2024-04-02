@@ -101,6 +101,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   temp0 = SQR(v0) * mmw0 * mp / kb;
   temp04 = std::pow(temp0, 4.0);
   r0 = GM_cgs/SQR(clight);
+
+  std::cout.precision(17);
+  std::cout << "r0: " << r0 << std::endl << "temp0: " << temp0 << std::endl;
+
   kappa0 = 0.2;
   rho0 = 1. / kappa0 / r0;
 
@@ -137,6 +141,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   SetUserOutputVariableName(Uov::TAU, "tau");
   SetUserOutputVariableName(Uov::GRAVSRC, "gravsrc");
   SetUserOutputVariableName(Uov::RADSRC, "radsrc");
+  SetUserOutputVariableName(Uov::MESAFLUX, "mesaflux");
 
   // MESA DATA I/O
   // =============
@@ -185,9 +190,25 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
         mesa_og(l,n) /= rho0*SQR(v0);
       else if (l==OPACITY)
         mesa_og(l,n) = std::pow(10.0, mesa_og(l,n)) / kappa0;
-      else if (l==LUMINOSITY)
+      else if (l==LUMINOSITY) {
+        Real original_value = mesa_og(l,n);
         mesa_og(l,n) = std::pow(10.0, mesa_og(l,n)) * lsun /
                        (4.0 * PI * SQR(r0) * clight * arad * temp04);
+        std::cout.precision(17);
+        printf("n: %d   radius: %g\n", n, mesa_og(RADIUS,n));
+        printf("mesa_og: ");
+        std::cout << original_value << std::endl;
+        printf("std::pow(10.0, mesa_og(l,n)): ");
+        std::cout << std::pow(10.0, original_value) << std::endl;
+        printf("std::pow(10.0, mesa_og(l,n)) * lsun: ");
+        std::cout << std::pow(10.0, original_value) * lsun << std::endl;
+        printf("std::pow(10.0, mesa_og(l,n)) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04): ");
+        std::cout << std::pow(10.0, original_value) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04) << std::endl;
+        printf("\n\n");
+
+        std::cerr.precision(17);
+        std::cerr << mesa_og(RADIUS,n) << " " << mesa_og(l,n) << " " << original_value << std::endl;
+      }
     }
   }
 
@@ -301,6 +322,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         phydro->u(IM3,k,j,i) = 0.0;
 
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
+        ruser_meshblock_data[Uov::MESAFLUX](k,j,i) = Fr;
         //Real Er = 3.0 * mesa_in(PRAD, i);
         //Real temp = std::pow(Er, 0.25);
         Real temp = mesa_in(PGAS, i) / rho;
@@ -514,5 +536,44 @@ void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
       lab_ir[n] = ir_neg / cm_to_lab[n];
     }
   }
+
+  // Double check that the flux calculated from these intensities is the same as the target flux
+  Real trancoef[nang];
+  Real wmucm[nang];
+  Real cmtolab[nang];
+  Real mucm[nang];
+  Real ircm[nang];
+
+  Real numsum = 0.0;
+  for (int n=0; n<nang; ++n) {
+    Real vdotn = mu[n] * beta;
+    Real vnc = 1.0 - vdotn;
+    trancoef[n] = lorz * vnc;
+    wmucm[n] = wmu[n]/(trancoef[n] * trancoef[n]);
+    numsum += wmucm[n];
+    cmtolab[n] = trancoef[n] * trancoef[n] * trancoef[n] * trancoef[n];
+    Real angcoef = lorz * (1.0 - lorz * vdotn /(1.0 + lorz));
+    Real incoef = 1.0/(lorz * vnc);
+    mucm[n] = (mu[n] - beta * angcoef) * incoef;
+  }
+
+  numsum = 1.0/numsum;
+  for (int n=0; n<nang; ++n) {
+     wmucm[n] *= numsum;
+  }
+
+  for (int n=0; n<nang; ++n) {
+    ircm[n] = lab_ir[n] * cm_to_lab[n];
+  }
+
+
+  Real frx = 0.0;
+  for (int n=0; n<nang; ++n) {
+    Real ir_weight = ircm[n] * wmucm[n];
+    frx += ir_weight * mucm[n];
+  }
+
+  printf("Target flux: %g    Calculated flux: %g\n", Fr, frx);
+
 }
 } // namespace
