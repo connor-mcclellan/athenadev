@@ -63,8 +63,6 @@ Real mmw0;
 // Physical constants
 Real clight;
 Real arad;
-Real kb;
-Real mp;
 
 Real energy_alpha;
 
@@ -86,26 +84,17 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Real crat = pin->GetReal("radiation", "crat");
   Real prat = pin->GetReal("radiation", "prat");
 
-  Real GM = pin->GetReal("problem", "GM");
-  Real mass = pin->GetReal("problem", "mass");
-  Real GM_cgs = mass * Constants::solar_mass_cgs * Constants::grav_const_cgs;
   energy_alpha = pin->GetReal("problem", "energy_alpha");
 
-  clight = Constants::speed_of_light_cgs;
-  kb = Constants::k_boltzmann_cgs;
-  arad = Constants::radiation_aconst_cgs;
-  mp = Constants::hydrogen_mass_cgs;
+  clight = pin->GetReal("problem", "clight");
+  arad = pin->GetReal("problem", "arad");
 
-  v0 = clight / crat;
-  mmw0 = 4./3;
-  temp0 = SQR(v0) * mmw0 * mp / kb;
+  v0 = pin->GetReal("problem", "v0");
+  mmw0 = pin->GetReal("problem", "mmw0");
+  temp0 = pin->GetReal("problem", "temp0");
   temp04 = std::pow(temp0, 4.0);
-  r0 = GM_cgs/SQR(clight);
-
-  std::cout.precision(17);
-  std::cout << "r0: " << r0 << std::endl << "temp0: " << temp0 << std::endl;
-
-  kappa0 = 0.2;
+  r0 = pin->GetReal("problem", "r0");
+  kappa0 = pin->GetReal("problem", "kappa0");
   rho0 = 1. / kappa0 / r0;
 
   EnrollUserRadBoundaryFunction(BoundaryFace::inner_x1, RadInnerX1);
@@ -195,16 +184,16 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
         mesa_og(l,n) = std::pow(10.0, mesa_og(l,n)) * lsun /
                        (4.0 * PI * SQR(r0) * clight * arad * temp04);
         std::cout.precision(17);
-        printf("n: %d   radius: %g\n", n, mesa_og(RADIUS,n));
-        printf("mesa_og: ");
+        //printf("n: %d   radius: %g\n", n, mesa_og(RADIUS,n));
+        //printf("mesa_og: ");
         std::cout << original_value << std::endl;
-        printf("std::pow(10.0, mesa_og(l,n)): ");
+        //printf("std::pow(10.0, mesa_og(l,n)): ");
         std::cout << std::pow(10.0, original_value) << std::endl;
-        printf("std::pow(10.0, mesa_og(l,n)) * lsun: ");
+        //printf("std::pow(10.0, mesa_og(l,n)) * lsun: ");
         std::cout << std::pow(10.0, original_value) * lsun << std::endl;
-        printf("std::pow(10.0, mesa_og(l,n)) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04): ");
+        //printf("std::pow(10.0, mesa_og(l,n)) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04): ");
         std::cout << std::pow(10.0, original_value) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04) << std::endl;
-        printf("\n\n");
+        //printf("\n\n");
 
         std::cerr.precision(17);
         std::cerr << mesa_og(RADIUS,n) << " " << mesa_og(l,n) << " " << original_value << std::endl;
@@ -573,7 +562,7 @@ void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
     frx += ir_weight * mucm[n];
   }
 
-  printf("Target flux: %g    Calculated flux: %g\n", Fr, frx);
+  //printf("Target flux: %g    Calculated flux: %g\n", Fr, frx);
 
 }
 } // namespace
