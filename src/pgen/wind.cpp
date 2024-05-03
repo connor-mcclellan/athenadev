@@ -176,7 +176,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
       else if (l==PRAD)
         mesa_og(l,n) /= arad * temp04;
       else if (l==PGAS)
-        mesa_og(l,n) /= rho0*SQR(v0);
+        mesa_og(l,n) /= rho0 * v0 * v0;
       else if (l==OPACITY)
         mesa_og(l,n) = std::pow(10.0, mesa_og(l,n)) / kappa0;
       else if (l==LUMINOSITY) {
@@ -256,31 +256,6 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
             Real rho = phydro->u(IDN, k, j, i);
             Real press = phydro->w(IPR,k,j,i);
             user_out_var(Uov::CSOUND,k,j,i) = std::sqrt(gamma * press / rho);
-          } else if (l==Uov::GRAVSRC) {
-            Real rho = phydro->u(IDN, k, j, i);
-            Real mx = phydro->u(IM1, k, j, i);
-            Real my = phydro->u(IM2, k, j, i);
-            Real mz = phydro->u(IM3, k, j, i);
-
-            // Left and right cell faces
-            Real rl = pcoord->x1f(i);
-            Real rr = pcoord->x1f(i + 1);
-            Real rc = pcoord->x1v(i);
-
-            // Gravitational parameter
-            Real gm = SQR(pnrrad->crat);
-
-            // Gravitational potential
-            Real phil = -gm/rl;
-            Real phir = -gm/rr;
-
-            // Source term - force per unit volume
-            Real dt = pmy_mesh->dt;
-            Real src = - dt * rho * (phir - phil) / (rr - rl);
-
-            // Momentum change per timestep due to gravity
-            user_out_var(Uov::GRAVSRC, k, j, i) = src / dt;
-
           } else if ((l==Uov::TAU) && (i != ie+NGHOST)) {
             Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pcoord->dx1v(i);
             user_out_var(l,k,j,i) = tau_avg;
@@ -312,10 +287,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
         ruser_meshblock_data[Uov::MESAFLUX](k,j,i) = Fr;
-        //Real Er = 3.0 * mesa_in(PRAD, i);
+        Real Er = 3. * mesa_in(PRAD, i);
         //Real temp = std::pow(Er, 0.25);
-        Real temp = mesa_in(PGAS, i) / rho;
-        Real Er = std::pow(temp, 4.0);
+        //Real temp = mesa_in(PGAS, i) / rho;
+        //Real Er = std::pow(temp, 4.0);
 
         if (NON_BAROTROPIC_EOS) {
           phydro->u(IEN,k,j,i) = mesa_in(PGAS, i) / (gamma - 1.0);
@@ -356,13 +331,13 @@ void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
           kappa_ff /= kappa0;
 
           // Scattering opacity
-          Real kappa_s = 1. / (1. + std::pow(temp * temp0 / 4.5e8, 0.86));
+          Real kappa_s = 1. / (1. + std::pow(temp * temp0 / 5.04e8, 0.902));
           //Real kappa_s = 1.0;
 
           // Set all the matter-radiation coupling coefficients
           pnrrad->sigma_s(k, j, i, ifr) = rho * kappa_s;
           //pnrrad->sigma_s(k, j, i, ifr) = rho * mesa_in(OPACITY, i);
-          pnrrad->sigma_a(k, j, i, ifr) = rho * kappa_ff * 0.1;
+          pnrrad->sigma_a(k, j, i, ifr) = 0.0;//rho * kappa_ff * 0.1;
           pnrrad->sigma_p(k, j, i, ifr) = rho * kappa_ff;
           pnrrad->sigma_pe(k, j, i, ifr) = rho * kappa_ff;
         }
@@ -389,7 +364,7 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       for (int i=il-1; i>=il-ngh; --i) {
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
-        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
+        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0)) * (pco->x1v(i+1) - pco->x1v(i));
         Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
         Real temp = std::pow(Er, 0.25);
 
@@ -397,7 +372,7 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
           if (n == IDN) {
             prim(n, k, j, i) = mesa_in(RHO, i);
           } else if (n == IPR) {
-            prim(n, k, j, i) = mesa_in(RHO, i) * temp;
+            prim(n, k, j, i) = mesa_in(PGAS, i);
           } else if (n == IVX) {
             prim(n, k, j, i) = mesa_in(VELOCITY, i);
           } else {
@@ -430,7 +405,7 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
       for (int i=is-1; i>=is-ngh; --i) {
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
-        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)) * pco->dx1v(i);
+        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0)) * (pco->x1v(i+1) - pco->x1v(i));
         Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
 
         Real *lab_ir = &(ir(k, j, i, 0));
