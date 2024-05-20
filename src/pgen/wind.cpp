@@ -337,7 +337,7 @@ void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
           // Set all the matter-radiation coupling coefficients
           pnrrad->sigma_s(k, j, i, ifr) = rho * kappa_s;
           //pnrrad->sigma_s(k, j, i, ifr) = rho * mesa_in(OPACITY, i);
-          pnrrad->sigma_a(k, j, i, ifr) = 0.0;//rho * kappa_ff * 0.1;
+          pnrrad->sigma_a(k, j, i, ifr) = rho * kappa_ff * 0.1;
           pnrrad->sigma_p(k, j, i, ifr) = rho * kappa_ff;
           pnrrad->sigma_pe(k, j, i, ifr) = rho * kappa_ff;
         }

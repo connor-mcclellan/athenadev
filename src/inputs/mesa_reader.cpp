@@ -152,7 +152,7 @@ void MesaReader(const char *filename, std::vector<std::string> &headers,
 }
 
 void GetMesaData(std::string field, std::vector<std::string> vars,
-                 std::vector<Real> vdata, Real *pdata) {
+                 std::vector<double> vdata, double *pdata) {
   // \brief Copies M=(size of `vdata`)/(size of `vars`) elements from `vdata`
   // into `*pdata`, starting at the index n at which `field` and `vars[n]` match
   int nradii = vdata.size() / vars.size();
@@ -172,7 +172,7 @@ void GetMesaData(std::string field, std::vector<std::string> vars,
 }
 
 void GetMesaHeader(std::string field, std::vector<std::string> headers,
-                   std::vector<std::string> hdata, Real &value) {
+                   std::vector<std::string> hdata, double &value) {
   // \brief Converts a string from a MESA header field into a double
   for (int h = 0; h < headers.size(); h++) {
     if (field.compare(headers[h]) == 0) {
