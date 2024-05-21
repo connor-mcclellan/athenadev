@@ -183,49 +183,46 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
         Real original_value = mesa_og(l,n);
         mesa_og(l,n) = std::pow(10.0, mesa_og(l,n)) * lsun /
                        (4.0 * PI * SQR(r0) * clight * arad * temp04);
-        std::cout.precision(17);
-        //printf("n: %d   radius: %g\n", n, mesa_og(RADIUS,n));
-        //printf("mesa_og: ");
-        std::cout << original_value << std::endl;
-        //printf("std::pow(10.0, mesa_og(l,n)): ");
-        std::cout << std::pow(10.0, original_value) << std::endl;
-        //printf("std::pow(10.0, mesa_og(l,n)) * lsun: ");
-        std::cout << std::pow(10.0, original_value) * lsun << std::endl;
-        //printf("std::pow(10.0, mesa_og(l,n)) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04): ");
-        std::cout << std::pow(10.0, original_value) * lsun / (4.0 * PI * SQR(r0) * clight * arad * temp04) << std::endl;
-        //printf("\n\n");
-
-        std::cerr.precision(17);
-        std::cerr << mesa_og(RADIUS,n) << " " << mesa_og(l,n) << " " << original_value << std::endl;
       }
     }
   }
 
   // Interpolate the mesa variables onto the Athena++ cell-centered grid
   mesa_in.NewAthenaArray(NUM_MESA, nx1);
-  for (int i=is-NGHOST; i<=ie+NGHOST; ++i) {
-    int n;
-    Real fraction = 0.0;
-    Real r = pcoord->x1v(i);
-    if (!is_between(r, mesa_og(RADIUS,nmesaradii-1), mesa_og(RADIUS,0))) {
-      std::stringstream msg;
-      msg << "### FATAL ERROR in MeshBlock::InitUserMeshBlockData" << std::endl
-          << "Attempted MESA interpolation out of bounds (r=" << r << " not in ["
-          << mesa_og(RADIUS,nmesaradii-1) << ", " << mesa_og(RADIUS,0) << "])."
-          << std::endl;
-      ATHENA_ERROR(msg);
-    } else {
-      for (n=nmesaradii-1; n>0; --n) {
-        bool bracketed = is_between(r, mesa_og(RADIUS,n), mesa_og(RADIUS,n-1), fraction);
-        if (bracketed) {
-          break;
-        }
-      }
-    }
-    for (int l=0; l<NUM_MESA; ++l) {
-      mesa_in(l,i) = (fraction)*mesa_og(l,n-1) + (1.0-fraction)*mesa_og(l,n);
-    }
+  for (int l=0; l<NUM_MESA; ++l) {
+    MeshInterp(&(pcoord->x1v(0)), &mesa_in(l,0), is-NGHOST, ie+NGHOST,
+               &mesa_og(RADIUS,0), &mesa_og(l,0), 0, nmesaradii);
   }
+
+  // Check the interpolated MESA radius for self-consistency with Athena++ x1v
+  std::cout << "=================================" << std::endl
+            << "=================================" << std::endl
+            << "==                             ==" << std::endl
+            << "==   MESA INTERPOLATION TEST   ==" << std::endl
+            << "==                             ==" << std::endl
+            << "=================================" << std::endl
+            << "=================================" << std::endl << std::endl;
+  bool pass = true;
+  Real err = 0.0;
+  int successes = 0;
+  int total = 0;
+  for (int i=is-NGHOST; i<=ie+NGHOST; ++i) {
+    err = std::fabs(mesa_in(RADIUS, i) - pcoord->x1v(i));
+    std::cout.precision(17);
+    std::cout << "i=" << i << std::endl
+              << "interpolated: " << mesa_in(RADIUS, i) << std::endl
+              << "      actual: " << pcoord->x1v(i) << std::endl
+              << "         err: " << err << std::endl;
+    pass = err < std::numeric_limits<double>::epsilon();
+    std::string pass_str = pass ? "\033[;32mPASS\033[0m"
+                                : "\033[1;31mFAIL\033[0m";
+    std::cout << "                             " << pass_str << std::endl;
+    successes += pass ? 1 : 0;
+    total++;
+  }
+  std::cout << "                             "
+            << successes << " / " << total << std::endl;
+
   mesa_og.DeleteAthenaArray();
 } // InitUserMeshblockData
 
@@ -423,24 +420,6 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
 
 
 namespace {
-
-bool is_between(Real x, Real a, Real b) {
-  if (std::signbit(a - x) != std::signbit(b - x)) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-bool is_between(Real x, Real a, Real b, Real &t) {
-  if (std::signbit(a - x) != std::signbit(b - x)) {
-    t = (x - a) / (b - a);
-    return true;
-  } else {
-    return false;
-  }
-}
-
 void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
               Real *lab_ir, Real *mu, Real *wmu) {
 
@@ -530,7 +509,6 @@ void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
   for (int n=0; n<nang; ++n) {
     ircm[n] = lab_ir[n] * cm_to_lab[n];
   }
-
 
   Real frx = 0.0;
   for (int n=0; n<nang; ++n) {

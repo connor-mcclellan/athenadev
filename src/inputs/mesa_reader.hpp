@@ -19,5 +19,8 @@ void GetMesaData(std::string field, std::vector<std::string> vars,
 void GetMesaHeader(std::string field, std::vector<std::string> headers,
                    std::vector<std::string> hdata, Real &value);
 
+// Function for interpolating MESA data onto a new grid
+void MeshInterp(double *x_new, double *y_new, int ll, int lu,
+                double *x_old, double *y_old, int ml, int mu);
 
 #endif

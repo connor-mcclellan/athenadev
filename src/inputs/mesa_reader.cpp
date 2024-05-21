@@ -186,3 +186,17 @@ void GetMesaHeader(std::string field, std::vector<std::string> headers,
   ATHENA_ERROR(msg);
   return;
 }
+
+void MeshInterp(double *x_new, double *y_new, int ll, int lu,
+                double *x_old, double *y_old, int ml, int mu) {
+  for (int l=ll; l<=lu; ++l) {
+    int m;
+    for (m=ml; m<mu; ++m) {
+      bool is_between = (std::signbit(x_old[m]-x_new[l]) != std::signbit(x_old[m+1]-x_new[l]));
+      if (is_between)
+        break;
+    }
+    double t = (x_new[l]-x_old[m])/(x_old[m+1]-x_old[m]);
+    y_new[l] = (1.0-t)*y_old[m] + t*y_old[m+1];
+  }
+}
