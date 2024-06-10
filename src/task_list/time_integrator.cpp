@@ -1893,8 +1893,9 @@ TaskStatus TimeIntegratorTaskList::AddSourceTerms(MeshBlock *pmb, int stage) {
   PassiveScalars *ps = pmb->pscalars;
 
   // return if there are no source terms to be added
-  if (!(ph->hsrc.hydro_sourceterms_defined)
-      || pmb->pmy_mesh->fluid_setup != FluidFormulation::evolve) return TaskStatus::next;
+  if (!(ph->hsrc.hydro_sourceterms_defined))
+//      || pmb->pmy_mesh->fluid_setup != FluidFormulation::evolve) // BCM: temporarily handling gravity source term flag in the pgen, so we want to call AddSourceTerms regardless of whether the fluid is evolving or not
+      return TaskStatus::next;
 
   if (stage <= nstages) {
     if (stage_wghts[stage-1].main_stage) {
@@ -2722,6 +2723,7 @@ TaskStatus TimeIntegratorTaskList::CalculateRadFlux(MeshBlock *pmb, int stage) {
                                      prad->pradintegrator->rad_xorder);
       }
     }
+    printf("STAGE %d: CALCULATE FLUXES CALLED\n", stage);
     return TaskStatus::next;
   }
   return TaskStatus::fail;
@@ -2758,8 +2760,9 @@ TaskStatus TimeIntegratorTaskList::AddSourceTermsRad(MeshBlock *pmb, int stage) 
                                                        prad->ir, prad->ir);
           }
 
+      // BCM: Temporarily moved out of conditional to get user outputs when rad is decoupled
+      prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
       if (prad->set_source_flag > 0) {
-        prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
         prad->pradintegrator->AddSourceTerms(pmb, ph->u);
       }
     }

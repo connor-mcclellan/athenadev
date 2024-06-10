@@ -42,7 +42,7 @@ AthenaArray<Real> mesa_og;
 AthenaArray<Real> mesa_in;
 
 void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
-              Real *lab_ir, Real *mu, Real *wmu);
+              Real *lab_ir, Real *lab_ir1, Real *mu, Real *wmu);
 
 bool is_between(Real x, Real a, Real b);
 bool is_between(Real x, Real a, Real b, Real &t);
@@ -67,6 +67,16 @@ Real arad;
 Real energy_alpha;
 
 } // namespace
+
+void Newtonian(MeshBlock *pmb, const Real time, const Real dt,
+    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+    AthenaArray<Real> &cons_scalar);
+
+void UserPointMass(MeshBlock *pmb, const Real time, const Real dt,
+    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+    AthenaArray<Real> &cons_scalar);
 
 void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
                 const AthenaArray<Real> &w, FaceField &b, AthenaArray<Real> &ir,
@@ -97,6 +107,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   kappa0 = pin->GetReal("problem", "kappa0");
   rho0 = 1. / kappa0 / r0;
 
+  EnrollUserExplicitSourceFunction(UserPointMass);
   EnrollUserRadBoundaryFunction(BoundaryFace::inner_x1, RadInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, HydroInnerX1);
   return;
@@ -298,15 +309,137 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
         if (IM_RADIATION_ENABLED || NR_RADIATION_ENABLED) {
             Real *lab_ir = &(pnrrad->ir(k, j, i, 0));
+            Real *lab_ir1 = &(pnrrad->ir1(k, j, i, 0));
             Real *mu     = &(pnrrad->mu(0, k, j, i, 0));
             Real *wmu    = &(pnrrad->wmu(0));
             Real beta = phydro->u(IM1,k,j,i)/rho/pnrrad->crat;
-            SetLabIr(pnrrad->nang, beta, Er, Fr, k, j, i, lab_ir, mu, wmu);
+            SetLabIr(pnrrad->nang, beta, Er, Fr, k, j, i, lab_ir, lab_ir1, mu, wmu);
         }
       }
     }
   }
 }
+
+void Newtonian(MeshBlock *pmb, const Real time, const Real dt,
+    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+    AthenaArray<Real> &cons_scalar) {
+  // Custom gravity source term from Xiaoshan --- potentially more conservative?
+
+  int is = pmb->is, ie = pmb->ie;
+  int js = pmb->js, je = pmb->je;
+  int ks = pmb->ks, ke = pmb->ke;
+
+  Coordinates *pcoord = pmb->pcoord;
+  AthenaArray<Real> &x1flux = pmb->phydro->flux[X1DIR];
+
+  for (int i = is; i <= ie; ++i) {
+    for (int j = js; j <= je; ++j) {
+      for (int k = ks; k <= ke; ++k) {
+
+        // Mass density
+        Real rho = prim(IDN, k, j, i);
+
+        // Left and right cell faces
+        Real rl = pcoord->x1f(i);
+        Real rr = pcoord->x1f(i + 1);
+
+        // Gravitational parameter
+        Real gm = 0.5 * SQR(pmb->pnrrad->crat);
+
+        // Gravitational potential at cell center, left face, and right face
+        Real phic = -gm/pcoord->x1v(i);
+        Real phil = -gm/rl;
+        Real phir = -gm/rr;
+
+        // Cell-average position cubed
+        Real vol = (rr*rr*rr - rl*rl*rl)/3;
+
+        // Source term - force per unit volume
+        Real src = - dt * rho * (phir - phil) / (rr - rl);
+
+        pmb->ruser_meshblock_data[Uov::GRAVSRC](k, j, i) = src / dt;
+
+        if (pmb->pmy_mesh->fluid_setup == FluidFormulation::evolve) {
+          cons(IM1, k, j, i) += src;
+
+          if (NON_BAROTROPIC_EOS) {
+            // 1D cell face areas
+            Real arear = rr * rr;
+            Real areal = rl * rl;
+
+            // x1flux is mass flux - g / (cm^2 s)
+            // area * x1flux is mass loss rate - g / s
+            Real phidivrhov = (arear * x1flux(IDN, k, j, i+1) -
+                               areal * x1flux(IDN, k, j, i)) * phic/vol;
+
+            Real divrhovphi = (arear * x1flux(IDN, k, j, i+1) * phir -
+                               areal * x1flux(IDN, k, j, i) * phil) / vol;
+
+            cons(IEN, k, j, i) += dt * (phidivrhov - divrhovphi);
+          }
+        }
+      }
+    }
+  }
+}
+
+void UserPointMass(MeshBlock *pmb, const Real time, const Real dt,
+    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+    AthenaArray<Real> &cons_scalar) {
+  // Copies the built-in PointMass hydro source term exactly for spherical
+  // polar coordinates. Used to update the user meshblock data even when
+  // hydro evolution is turned off.
+
+  int is = pmb->is, ie = pmb->ie;
+  int js = pmb->js, je = pmb->je;
+  int ks = pmb->ks, ke = pmb->ke;
+
+  Coordinates *pcoord = pmb->pcoord;
+  AthenaArray<Real> &x1flux = pmb->phydro->flux[X1DIR];
+
+  for (int i = is; i <= ie; ++i) {
+    for (int j = js; j <= je; ++j) {
+      for (int k = ks; k <= ke; ++k) {
+
+        // Mass density
+        Real rho = prim(IDN, k, j, i);
+
+        // Left and right cell faces
+        Real rl = pcoord->x1f(i);
+        Real rr = pcoord->x1f(i + 1);
+        Real rc = pcoord->x1v(i);
+
+        // Gravitational parameter
+        Real gm = 0.5 * SQR(pmb->pnrrad->crat);
+
+        // Gravitational potential at cell center, left face, and right face
+        Real phic = -gm/pcoord->x1v(i);
+        Real phil = -gm/rl;
+        Real phir = -gm/rr;
+
+        Real vol = (rr*rr*rr - rl*rl*rl) / 3.0;
+        Real area = 0.5*(rr*rr - rl*rl);
+        Real coord_src = area / vol;
+
+        Real src = dt * rho * coord_src * gm / rc;
+        pmb->ruser_meshblock_data[Uov::GRAVSRC](k, j, i) = -src / dt;
+
+        // only update the conserved variables if fluid evolution is turned on
+        if (pmb->pmy_mesh->fluid_setup == FluidFormulation::evolve) {
+          cons(IM1, k, j, i) -= src;
+          if (NON_BAROTROPIC_EOS) {
+            Real phy_src = 1.0 / SQR(rc);
+            cons(IEN, k, j, i) -= dt * 0.5 * gm * phy_src
+                                  * (x1flux(IDN,k,j,i) + x1flux(IDN,k,j,i+1));
+          }
+        }
+      }
+    }
+  }
+}
+
 
 void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
 
@@ -353,17 +486,17 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
     for (int j=jl; j<=ju; ++j) {
 
       // Calculate energy density in first active zone
-      Real Er_above = 0.0;
-      for (int n=0; n < pnrrad->nang; n++) {
-        Er_above += pnrrad->ir(k,j,il,n) * pnrrad->wmu(n);
-      }
+      //Real Er_above = 0.0;
+      //for (int n=0; n < pnrrad->nang; n++) {
+      //  Er_above += pnrrad->ir(k,j,il,n) * pnrrad->wmu(n);
+      //}
 
       for (int i=il-1; i>=il-ngh; --i) {
-        Real x1v = pco->x1v(i);
-        Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
-        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0)) * (pco->x1v(i+1) - pco->x1v(i));
-        Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
-        Real temp = std::pow(Er, 0.25);
+        //Real x1v = pco->x1v(i);
+        //Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
+        //Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0)) * (pco->x1v(i+1) - pco->x1v(i));
+        //Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
+        //Real temp = std::pow(Er, 0.25);
 
         for (int n=0; n<=NHYDRO; n++) {
           if (n == IDN) {
@@ -373,10 +506,10 @@ void HydroInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
           } else if (n == IVX) {
             prim(n, k, j, i) = mesa_in(VELOCITY, i);
           } else {
-            prim(n, k, j, i) = prim(n, k, j, il);
+            prim(n, k, j, i) = TINY_NUMBER;
           }
         }
-        Er_above = Er;
+        //Er_above = Er;
       }
     }
   }
@@ -394,24 +527,26 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
     for (int j = js; j <= je; ++j) {
 
       // Calculate energy density in first active zone
-      Real Er_above = 0.0;
-      for (int n=0; n < pnrrad->nang; n++) {
-        Er_above += ir(k,j,is,n) * pnrrad->wmu(n);
-      }
+      //Real Er_above = 0.0;
+      //for (int n=0; n < pnrrad->nang; n++) {
+      //  Er_above += ir(k,j,is,n) * pnrrad->wmu(n);
+      //}
 
       for (int i=is-1; i>=is-ngh; --i) {
         Real x1v = pco->x1v(i);
         Real Fr = mesa_in(LUMINOSITY, i) / SQR(x1v);
-        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0)) * (pco->x1v(i+1) - pco->x1v(i));
-        Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
+        //Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0) + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0)) * (pco->x1v(i+1) - pco->x1v(i));
+        //Real Er = Er_above + energy_alpha * 3.0 * Fr * tau_avg;
+        Real Er = 3. * mesa_in(PRAD, i);
 
         Real *lab_ir = &(ir(k, j, i, 0));
+        Real *lab_ir1 = &(pnrrad->ir1(k, j, i, 0));
         Real *mu     = &(pnrrad->mu(0, k, j, i, 0));
         Real *wmu    = &(pnrrad->wmu(0));
         Real beta = w(IVX,k,j,i)/pnrrad->crat;
-        SetLabIr(pnrrad->nang, beta, Er, Fr, k, j, i, lab_ir, mu, wmu);
+        SetLabIr(pnrrad->nang, beta, Er, Fr, k, j, i, lab_ir, lab_ir1, mu, wmu);
 
-        Er_above = Er;
+        //Er_above = Er;
       }
     }
   }
@@ -421,7 +556,7 @@ void RadInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
 
 namespace {
 void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
-              Real *lab_ir, Real *mu, Real *wmu) {
+              Real *lab_ir, Real *lab_ir1, Real *mu, Real *wmu) {
 
   Real er_pos, fr_pos;
   Real er_neg, fr_neg;
@@ -476,45 +611,47 @@ void SetLabIr(int nang, Real beta, Real Er, Real Fr, int k, int j, int i,
   for (int n = 0; n < nang; ++n) {
     if (mu_cm[n] >= 0.0) {
       lab_ir[n] = ir_pos / cm_to_lab[n];
+      lab_ir1[n] = ir_pos / cm_to_lab[n];
     } else {
       lab_ir[n] = ir_neg / cm_to_lab[n];
+      lab_ir1[n] = ir_neg / cm_to_lab[n];
     }
   }
 
   // Double check that the flux calculated from these intensities is the same as the target flux
-  Real trancoef[nang];
-  Real wmucm[nang];
-  Real cmtolab[nang];
-  Real mucm[nang];
-  Real ircm[nang];
+  //Real trancoef[nang];
+  //Real wmucm[nang];
+  //Real cmtolab[nang];
+  //Real mucm[nang];
+  //Real ircm[nang];
 
-  Real numsum = 0.0;
-  for (int n=0; n<nang; ++n) {
-    Real vdotn = mu[n] * beta;
-    Real vnc = 1.0 - vdotn;
-    trancoef[n] = lorz * vnc;
-    wmucm[n] = wmu[n]/(trancoef[n] * trancoef[n]);
-    numsum += wmucm[n];
-    cmtolab[n] = trancoef[n] * trancoef[n] * trancoef[n] * trancoef[n];
-    Real angcoef = lorz * (1.0 - lorz * vdotn /(1.0 + lorz));
-    Real incoef = 1.0/(lorz * vnc);
-    mucm[n] = (mu[n] - beta * angcoef) * incoef;
-  }
+  //Real numsum = 0.0;
+  //for (int n=0; n<nang; ++n) {
+  //  Real vdotn = mu[n] * beta;
+  //  Real vnc = 1.0 - vdotn;
+  //  trancoef[n] = lorz * vnc;
+  //  wmucm[n] = wmu[n]/(trancoef[n] * trancoef[n]);
+  //  numsum += wmucm[n];
+  //  cmtolab[n] = trancoef[n] * trancoef[n] * trancoef[n] * trancoef[n];
+  //  Real angcoef = lorz * (1.0 - lorz * vdotn /(1.0 + lorz));
+  //  Real incoef = 1.0/(lorz * vnc);
+  //  mucm[n] = (mu[n] - beta * angcoef) * incoef;
+  //}
 
-  numsum = 1.0/numsum;
-  for (int n=0; n<nang; ++n) {
-     wmucm[n] *= numsum;
-  }
+  //numsum = 1.0/numsum;
+  //for (int n=0; n<nang; ++n) {
+  //   wmucm[n] *= numsum;
+  //}
 
-  for (int n=0; n<nang; ++n) {
-    ircm[n] = lab_ir[n] * cm_to_lab[n];
-  }
+  //for (int n=0; n<nang; ++n) {
+  //  ircm[n] = lab_ir[n] * cm_to_lab[n];
+  //}
 
-  Real frx = 0.0;
-  for (int n=0; n<nang; ++n) {
-    Real ir_weight = ircm[n] * wmucm[n];
-    frx += ir_weight * mucm[n];
-  }
+  //Real frx = 0.0;
+  //for (int n=0; n<nang; ++n) {
+  //  Real ir_weight = ircm[n] * wmucm[n];
+  //  frx += ir_weight * mucm[n];
+  //}
 
   //printf("Target flux: %g    Calculated flux: %g\n", Fr, frx);
 

@@ -437,6 +437,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
       for (int i=is; i<=ie; ++i) {
+        pmb->ruser_meshblock_data[Uov::RADSRC](k,j,i) = 0.0;
         // first, calculate Er and Fr in lab frame before the step
         for (int ifr=0; ifr<nfreq; ++ifr) {
           Real *p_ir0 =  &(ir_ini(k,j,i,ifr*nang));
@@ -445,7 +446,6 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
           Real fry_fr = 0.0;
           Real frz_fr = 0.0;
 
-          pmb->ruser_meshblock_data[Uov::RADSRC](k,j,i) = 0.0;
           if (IM_RADIATION_ENABLED) {
             // Zero the UOV outputs
             pmb->ruser_meshblock_data[Uov::DIVFLX_SUM](k,j,i) = 0.0;
