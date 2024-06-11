@@ -140,18 +140,18 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
           if (advv >0) {
             for (int n=0; n<prad->n_fre_ang; ++n) {
               x1flux(k,j,i,n) += advv * irln[n];
-              if ((i == 5 || i == 6) && (n==1)) {
-                std::cout.precision(17);
-                std::cout << "time= " << pmb->pmy_mesh->time << "    i=" << i << "    n=" << n << "    x1flux=" << x1flux(k,j,i,n) <<  std::endl;
-              }
+//              if ((i == 5 || i == 6) && (n==1)) {
+//                std::cout.precision(17);
+//                std::cout << "time= " << pmb->pmy_mesh->time << "    i=" << i << "    n=" << n << "    x1flux=" << x1flux(k,j,i,n) <<  std::endl;
+//              }
             }
           } else {
             for (int n=0; n<prad->n_fre_ang; ++n) {
               x1flux(k,j,i,n) += advv * irrn[n];
-              if ((i == 5 || i == 6) && (n==1)) {
-                std::cout.precision(17);
-                std::cout << "time= " << pmb->pmy_mesh->time << "    i=" << i << "    n=" << n << "    x1flux=" << x1flux(k,j,i,n) <<  std::endl;
-              }
+//              if ((i == 5 || i == 6) && (n==1)) {
+//                std::cout.precision(17);
+//                std::cout << "time= " << pmb->pmy_mesh->time << "    i=" << i << "    n=" << n << "    x1flux=" << x1flux(k,j,i,n) <<  std::endl;
+//              }
             }
           }
         }
@@ -732,9 +732,9 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
         Real *flxn = &(dflx(i,0));
         for (int n=0; n<prad->n_fre_ang; ++n) {
           flxn[n] = (x1area(i+1) *flxr[n] - x1area(i)*flxl[n]);
-          std::cout.precision(17);
-          if ((i==5) && (n==1))
-            std::cout << "i=" << i << "    n=" << n << "    x1area(i+1)*flxr[n]=" << x1area(i+1)*flxr[n] << "    x1area(i)*flxl[n]=" << x1area(i)*flxl[n] << std::endl;
+//          std::cout.precision(17);
+//          if ((i==5) && (n==1))
+//            std::cout << "i=" << i << "    n=" << n << "    x1area(i+1)*flxr[n]=" << x1area(i+1)*flxr[n] << "    x1area(i)*flxl[n]=" << x1area(i)*flxl[n] << std::endl;
         }
       }
 
@@ -772,10 +772,10 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
         Real *iro = &(ir_out(k,j,i,0));
         Real *flxn = &(dflx(i,0));
         for (int n=0; n<prad->n_fre_ang; ++n) {
-          std::cout.precision(17);
-          Real debug_fldiv = -wght*flxn[n]/vol(i);
-          if ((i==5) && (n==1))
-            std::cout << "i=" << i << "    n=" << n << "    flxn=" << flxn[n] << "    -wght*flxn[n]/vol(i) = " << debug_fldiv << "    Ir = " << irin[n] << std::endl;
+//          std::cout.precision(17);
+//          Real debug_fldiv = -wght*flxn[n]/vol(i);
+//          if ((i==5) && (n==1))
+//            std::cout << "i=" << i << "    n=" << n << "    flxn=" << flxn[n] << "    -wght*flxn[n]/vol(i) = " << debug_fldiv << "    Ir = " << irin[n] << std::endl;
           iro[n] = std::max(irin[n]-wght*flxn[n]/vol(i), static_cast<Real>(TINY_NUMBER));
           //iro[n] = iro[n]-wght*flxn[n]/vol(i);
         }

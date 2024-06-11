@@ -2723,7 +2723,7 @@ TaskStatus TimeIntegratorTaskList::CalculateRadFlux(MeshBlock *pmb, int stage) {
                                      prad->pradintegrator->rad_xorder);
       }
     }
-    printf("STAGE %d: CALCULATE FLUXES CALLED\n", stage);
+//    printf("STAGE %d: CALCULATE FLUXES CALLED\n", stage);
     return TaskStatus::next;
   }
   return TaskStatus::fail;
