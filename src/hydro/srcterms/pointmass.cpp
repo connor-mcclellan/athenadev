@@ -25,6 +25,7 @@
 void HydroSourceTerms::PointMass(const Real dt, const AthenaArray<Real> *flux,
                                  const AthenaArray<Real> &prim, AthenaArray<Real> &cons) {
   MeshBlock *pmb = pmy_hydro_->pmy_block;
+  printf("BUILT IN POINTMASS GRAVITY CALLED\n");
   for (int k=pmb->ks; k<=pmb->ke; ++k) {
     for (int j=pmb->js; j<=pmb->je; ++j) {
 #pragma omp simd

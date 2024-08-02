@@ -25,7 +25,7 @@ namespace Uov {
 //print(text)
 
 // User output variables
-enum {CSOUND, GRAD_P, GRAVSRC, MDOT, EGAM, NUM_UOV};
+enum {CSOUND, GRAD_P, GRAVSRC, RADSRC, MDOT, EGAM, NUM_UOV};
 }
 
 #endif // GLOBALS_HPP_
