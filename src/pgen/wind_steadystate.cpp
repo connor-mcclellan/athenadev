@@ -151,14 +151,21 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   }
 
   // Allocate user meshblock data arrays
-  AllocateRealUserMeshBlockDataField(2);
-  ruser_meshblock_data[0].NewAthenaArray(nx3, nx2, nx1);
+  AllocateRealUserMeshBlockDataField(3);
+  ruser_meshblock_data[0].NewAthenaArray(nx1+1);
   ruser_meshblock_data[1].NewAthenaArray(nx3, nx2, nx1);
+  ruser_meshblock_data[2].NewAthenaArray(nx3, nx2, nx1);
 
   // Allocate user output variables and set their names
-  AllocateUserOutputVariables(2);
-  SetUserOutputVariableName(0, "GravSrc_IM1");
-  SetUserOutputVariableName(1, "RadSource1");
+  AllocateUserOutputVariables(Uov::NUM_UOV);
+  SetUserOutputVariableName(Uov::GRAD_P_ACCEL, "grad_p_accel");
+  SetUserOutputVariableName(Uov::GRAV_ACCEL, "grav_accel");
+  SetUserOutputVariableName(Uov::RAD_ACCEL, "rad_accel");
+  SetUserOutputVariableName(Uov::NET_ACCEL, "net_accel");
+  SetUserOutputVariableName(Uov::MDOT, "mdot");
+  SetUserOutputVariableName(Uov::EDOT, "edot");
+  SetUserOutputVariableName(Uov::MACH_NUM, "mach_num");
+  SetUserOutputVariableName(Uov::TRAD_OVER_TGAS, "trad_over_tgas");
   return;
 }
 
@@ -167,6 +174,7 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
   Real gamma = peos->GetGamma();
   Real x1min = pmy_mesh->mesh_size.x1min;
   Real x1max = pcoord->x1f(ie+NGHOST+1);
+  AthenaArray<Real> &uov = user_out_var;
 
   for (int k = ks; k <= ke; k++) {
     for (int j = js; j <= je; j++) {
@@ -192,11 +200,23 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
         Real dt = pmy_mesh->dt;
         Real src = - dt * rho * (phir - phil) / (rr - rl);
 
+        // Calculate pressure gradient
+        AthenaArray<Real> &flx = ruser_meshblock_data[0];
+        Real dflx = x1area(i+1)*flx(i+1) - x1area(i)*flx(i);
+        uov(Uov::GRAD_P_ACCEL, k, j, i) = dflx / vol(i) / rho;
+
         // Gas acceleration per timestep due to gravity
-        user_out_var(0, k, j, i) = src / dt / rho;
+        uov(Uov::GRAV_ACCEL, k, j, i) = -src / dt / rho;
 
         // Copy over meshblock data for RadSource1
-        user_out_var(1, k, j, i) = ruser_meshblock_data[0](k, j, i) / dt / rho;
+        uov(Uov::RAD_ACCEL, k, j, i) = ruser_meshblock_data[2](k, j, i) / dt / rho;
+
+        // Sum up net acceleration
+        uov(Uov::NET_ACCEL, k, j, i) = uov(Uov::GRAD_P_ACCEL,k,j,i)
+                                       - uov(Uov::GRAV_ACCEL,k,j,i)
+                                       + uov(Uov::RAD_ACCEL,k,j,i);
+
+        uov(Uov::MDOT, k, j, i) = 4.0*PI*SQR(rc)*phydro->u(IM1,k,j,i);
       }
     }
   }
@@ -316,7 +336,7 @@ void Newtonian(MeshBlock *pmb, const Real time, const Real dt,
         Real phir = -gm/rr;
 
         // Cell-average position cubed
-        Real vol = (rr*rr*rr - rl*rl*rl)/3;
+        Real cellvol = (rr*rr*rr - rl*rl*rl)/3;
 
         // Source term - force per unit volume
         Real src = - dt * rho * (phir - phil) / (rr - rl);
@@ -331,10 +351,10 @@ void Newtonian(MeshBlock *pmb, const Real time, const Real dt,
         // x1flux is mass flux - g / (cm^2 s)
         // area * x1flux is mass loss rate - g / s
         Real phidivrhov = (arear * x1flux(IDN, k, j, i+1) -
-                           areal * x1flux(IDN, k, j, i)) * phic/vol;
+                           areal * x1flux(IDN, k, j, i)) * phic/cellvol;
 
         Real divrhovphi = (arear * x1flux(IDN, k, j, i+1) * phir -
-                           areal * x1flux(IDN, k, j, i) * phil) / vol;
+                           areal * x1flux(IDN, k, j, i) * phil)/cellvol;
 
         cons(IEN, k, j, i) += dt * (phidivrhov - divrhovphi);
       }

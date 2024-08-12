@@ -169,6 +169,15 @@ void Hydro::RiemannSolver(const int k, const int j, const int il, const int iu,
     flxi[IVZ] = sl*fl[IVZ] + sr*fr[IVZ];
     flxi[IEN] = sl*fl[IEN] + sr*fr[IEN] + sm*cp*am;
 
+    // Calculate the flux contribution from *only* gas pressure, not advected
+    // momentum
+    // Will use to calculate grad P in user output variables
+    Real fl_IPR = wli[IPR]*wli[IVX];
+    Real fr_IPR = wri[IPR]*wri[IVX];
+    Real cp_IPR = (ml*wri[IPR] + mr*wli[IPR])/(ml+mr);
+    Real flx_IPR = sl*fl_IPR + sr*fr_IPR + sm*cp_IPR*am;
+    pmy_block->ruser_meshblock_data[0](i) = flx_IPR;
+
     flx(IDN,k,j,i) = flxi[IDN];
     flx(ivx,k,j,i) = flxi[IVX];
     flx(ivy,k,j,i) = flxi[IVY];

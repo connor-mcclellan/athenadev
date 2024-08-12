@@ -518,7 +518,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
 
         // Now apply the radiation source terms to gas with energy and
         // momentum conservation
-//        pmb->ruser_meshblock_data[Uov::RADSRC](k,j,i) = -prat*delta_frx*invredc/pmb->pmy_mesh->dt;
+        pmb->ruser_meshblock_data[Uov::RAD_ACCEL](k,j,i) = -prat*delta_frx*invredc/pmb->pmy_mesh->dt/pmb->phydro->u(IDN,k,j,i);
         rad_source(0,k,j,i) = (-prat*delta_er  * invredfactor);
         rad_source(1,k,j,i) = (-prat*delta_frx * invredc);
         rad_source(2,k,j,i) = (-prat*delta_fry * invredc);
