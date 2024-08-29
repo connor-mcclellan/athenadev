@@ -66,11 +66,6 @@ namespace {
 // Function Declarations
 void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim);
 
-void Newtonian(MeshBlock *pmb, const Real time, const Real dt,
-    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-    AthenaArray<Real> &cons_scalar);
-
 void RadFixedInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
     const AthenaArray<Real> &w, FaceField &b, AthenaArray<Real> &ir, Real time, Real dt,
     int il, int iu, int jl, int ju, int kl, int ku, int ngh);
@@ -135,16 +130,17 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   printf("vinflow (MESH): %g\n", vinflow);
 
   // Enroll boundary functions and gravitational source term
-  EnrollUserExplicitSourceFunction(Newtonian);
   EnrollUserRadBoundaryFunction(BoundaryFace::inner_x1, RadFixedInnerX1);
   EnrollUserRadBoundaryFunction(BoundaryFace::outer_x1, RadVacuumOuterX1);
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, VacuumOuterX1);
 
-  EnrollUserExplicitSourceFunction(RestartRescale);
+  //EnrollUserExplicitSourceFunction(RestartRescale);
   return;
 }
 
+
+/*
 void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
                     const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
                     const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
@@ -198,6 +194,7 @@ void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
   }
   return;
 }
+*/
 
 
 void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
@@ -250,7 +247,7 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
 
         Real rho = phydro->u(IDN, k, j, i);
 
-        // Calculate gravity source term
+        // Calculate explicit gravity source term
 
         // Left and right cell faces
         Real rl = pcoord->x1f(i);
@@ -268,13 +265,14 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
         Real dt = pmy_mesh->dt;
         Real src = - dt * rho * (phir - phil) / (rr - rl);
 
+        // Gas acceleration per timestep due to gravity
+        uov(Uov::GRAV_ACCEL, k, j, i) = -src / dt / rho;
+
+
         // Calculate pressure gradient
         AthenaArray<Real> &flx = ruser_meshblock_data[0];
         Real dflx = x1area(i+1)*flx(i+1) - x1area(i)*flx(i);
         uov(Uov::GRAD_P_ACCEL, k, j, i) = dflx / vol(i) / rho;
-
-        // Gas acceleration per timestep due to gravity
-        uov(Uov::GRAV_ACCEL, k, j, i) = -src / dt / rho;
 
         // Copy over meshblock data for RadSource1
         uov(Uov::RAD_ACCEL, k, j, i) = ruser_meshblock_data[2](k, j, i) / dt / rho;
@@ -371,64 +369,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   return;
 }
 
-
-void Newtonian(MeshBlock *pmb, const Real time, const Real dt,
-    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-    AthenaArray<Real> &cons_scalar) {
-
-  int is = pmb->is, ie = pmb->ie;
-  int js = pmb->js, je = pmb->je;
-  int ks = pmb->ks, ke = pmb->ke;
-
-  Coordinates *pcoord = pmb->pcoord;
-  AthenaArray<Real> &x1flux = pmb->phydro->flux[X1DIR];
-
-  for (int i = is; i <= ie; ++i) {
-    for (int j = js; j <= je; ++j) {
-      for (int k = ks; k <= ke; ++k) {
-
-        // Mass density
-        Real rho = prim(IDN, k, j, i);
-
-        // Left and right cell faces
-        Real rl = pcoord->x1f(i);
-        Real rr = pcoord->x1f(i + 1);
-
-        // Gravitational parameter
-        Real gm = 0.5 * SQR(pmb->pnrrad->crat);
-
-        // Gravitational potential at cell center, left face, and right face
-        Real phic = -gm/pcoord->x1v(i);
-        Real phil = -gm/rl;
-        Real phir = -gm/rr;
-
-        // Cell-average position cubed
-        Real cellvol = (rr*rr*rr - rl*rl*rl)/3;
-
-        // Source term - force per unit volume
-        Real src = - dt * rho * (phir - phil) / (rr - rl);
-
-        cons(IM1, k, j, i) += src;
-        pmb->ruser_meshblock_data[0](k, j, i) = src / dt / rho;
-
-        // 1D cell face areas
-        Real arear = rr * rr;
-        Real areal = rl * rl;
-
-        // x1flux is mass flux - g / (cm^2 s)
-        // area * x1flux is mass loss rate - g / s
-        Real phidivrhov = (arear * x1flux(IDN, k, j, i+1) -
-                           areal * x1flux(IDN, k, j, i)) * phic/cellvol;
-
-        Real divrhovphi = (arear * x1flux(IDN, k, j, i+1) * phir -
-                           areal * x1flux(IDN, k, j, i) * phil)/cellvol;
-
-        cons(IEN, k, j, i) += dt * (phidivrhov - divrhovphi);
-      }
-    }
-  }
-}
 
 void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
 
