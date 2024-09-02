@@ -25,7 +25,7 @@ namespace Uov {
 //print(text)
 
 // User output variables
-enum {GRAD_P_ACCEL, GRAV_ACCEL, RAD_ACCEL, NET_ACCEL, MDOT, EDOT, MACH_NUM, TRAD_OVER_TGAS, NUM_UOV};
+enum {GRAD_P_ACCEL, GRAV_ACCEL, RAD_ACCEL, NET_ACCEL, MDOT, EDOT, CSOUND, TRAD_OVER_TGAS, NUM_UOV};
 }
 
 #endif // GLOBALS_HPP_

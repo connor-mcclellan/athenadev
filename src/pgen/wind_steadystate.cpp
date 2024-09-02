@@ -135,12 +135,11 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, VacuumOuterX1);
 
-  //EnrollUserExplicitSourceFunction(RestartRescale);
+  EnrollUserExplicitSourceFunction(RestartRescale);
   return;
 }
 
 
-/*
 void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
                     const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
                     const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
@@ -194,7 +193,6 @@ void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
   }
   return;
 }
-*/
 
 
 void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
@@ -227,7 +225,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   SetUserOutputVariableName(Uov::NET_ACCEL, "net_accel");
   SetUserOutputVariableName(Uov::MDOT, "mdot");
   SetUserOutputVariableName(Uov::EDOT, "edot");
-  SetUserOutputVariableName(Uov::MACH_NUM, "mach_num");
+  SetUserOutputVariableName(Uov::CSOUND, "csound");
   SetUserOutputVariableName(Uov::TRAD_OVER_TGAS, "trad_over_tgas");
   return;
 }
@@ -283,6 +281,9 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
                                        + uov(Uov::RAD_ACCEL,k,j,i);
 
         uov(Uov::MDOT, k, j, i) = 4.0*PI*SQR(rc)*phydro->u(IM1,k,j,i);
+
+        Real press = (phydro->u(IEN,k,j,i) - 0.5*SQR(phydro->u(IM1,k,j,i)/rho)) * (gamma - 1.0);
+        uov(Uov::CSOUND,k,j,i) = (std::sqrt(press / rho));
       }
     }
   }
@@ -433,7 +434,7 @@ void RadFixedInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
       for (int i=il-ngh; i<=il-1; ++i) {
 	Real x1v = pmb->pcoord->x1v(i);
 	Real Fr_edd = 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1v));
-	Real cs2 = pow(Er,0.25)/w(IDN,k,j,i);
+	Real cs2 = pow(Er,0.25);
 	Real bern = 0.5*(SQR(vinflow)-SQR(pnrrad->crat)/x1v)+gfac*cs2;
 	Real Fr_target = Fr_edd*(edot-mdot/(2.*PI*pow(pnrrad->crat,3))*bern);
         for (int ifr=0; ifr<pnrrad->nfreq; ++ifr) {
