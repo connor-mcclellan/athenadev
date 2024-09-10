@@ -125,6 +125,9 @@ void Hydro::RiemannSolver(const int k, const int j, const int il, const int iu,
     Real cp = (ml*tr + mr*tl)/(ml + mr);
     cp = cp > 0.0 ? cp : 0.0;
 
+    //Real cp_IPR = (ml*wli[IPR] + mr*wri[IPR])/(ml + mr);
+    //cp_IPR = cp_IPR > 0.0 ? cp : 0.0;
+
     // No loop-carried dependencies anywhere in this loop
     //    #pragma distribute_point
     //--- Step 6. Compute L/R fluxes along the line bm, bp
@@ -172,10 +175,10 @@ void Hydro::RiemannSolver(const int k, const int j, const int il, const int iu,
     // Calculate the flux contribution from *only* gas pressure, not advected
     // momentum
     // Will use to calculate grad P in user output variables
-    Real fl_IPR = wli[IPR]*wli[IVX];
-    Real fr_IPR = wri[IPR]*wri[IVX];
-    Real cp_IPR = (ml*wri[IPR] + mr*wli[IPR])/(ml+mr);
-    Real flx_IPR = sl*fl_IPR + sr*fr_IPR + sm*cp_IPR*am;
+    Real fl_IPR = wli[IPR];
+    Real fr_IPR = wri[IPR];
+    Real flx_IPR = sl*fl_IPR + sr*fr_IPR + sm*cp;
+    pmy_block->ruser_meshblock_data[1](i) = pmid;
     pmy_block->ruser_meshblock_data[0](i) = flx_IPR;
 
     flx(IDN,k,j,i) = flxi[IDN];

@@ -80,10 +80,10 @@ void FixedInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, Fac
 void VacuumOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
     Real time, Real dt, int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 
-void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
-              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-              AthenaArray<Real> &cons_scalar);
+//void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
+//              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+//              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+//              AthenaArray<Real> &cons_scalar);
 
 //========================================================================================
 //! \fn void Mesh::InitUserMeshData(ParameterInput *pin)
@@ -113,7 +113,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   // Characteristic dimensional quantities
   Real mass = pin->GetReal("problem", "mass");
-  r0 = mass * GMsun / SQR(c_cgs);
+  r0 = 2.0 * mass * GMsun / SQR(c_cgs);
   kappa0 = kappa_es;
   rho0 = 1. / kappa0 / r0;
   temp0 = SQR(v0) * mmw * mp / kb;
@@ -121,7 +121,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   mdot = pin->GetReal("problem", "mdot") / (rho0*v0*SQR(r0));
   edot = pin->GetReal("problem", "edot");
 
-  ledd = 2*PI*pow(crat,3);
   vinflow = mdot/(4.*PI*dens_base*SQR(mesh_size.x1min));
 
   scalefac = pin->GetReal("problem", "scalefac");
@@ -135,64 +134,64 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, VacuumOuterX1);
 
-  EnrollUserExplicitSourceFunction(RestartRescale);
+  //EnrollUserExplicitSourceFunction(RestartRescale);
   return;
 }
 
 
-void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
-                    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-                    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-                    AthenaArray<Real> &cons_scalar) {
-
-  int il = pmb->is-NGHOST;
-  int iu = pmb->ie+NGHOST;
-  int jl = pmb->js;
-  int ju = pmb->je;
-  int kl = pmb->ks;
-  int ku = pmb->ke;
-
-  if (std::fabs(scalefac - 1.0) < TINY_NUMBER) { // Scale factor is 1
-    return;
-
-  } else { // Scale factor other than 1
-    printf("scale factor (MESHBLOCK): %g\n", scalefac);
-
-    dens_base *= scalefac;
-    vinflow /= scalefac;
-
-    printf("dens_base (MESHBLOCK): %g\n", dens_base);
-    printf("vinflow (MESHBLOCK): %g\n", vinflow);
-
-    for (int k = kl; k <= ku; k++) {
-      for (int j = jl; j <= ju; j++) {
-        for (int i = il; i <= iu; i++) {
-
-
-          // Calculate the gas internal energy before the scaling
-          Real rho_old = cons(IDN,k,j,i);
-          printf("i=%03d --- density before:  %g\n", i, rho_old);
-          Real kin_old = 0.5*SQR(cons(IM1,k,j,i))/rho_old;
-          Real ein_old = cons(IEN,k,j,i)-kin_old;
-
-          // Scale the conserved variables
-          cons(IDN,k,j,i) *= scalefac;
-          Real rho_new = cons(IDN,k,j,i);
-          printf("      --- density after:   %g\n", rho_new);
-
-          // Gas total energy after scaling
-          Real kin_new = 0.5*SQR(cons(IM1,k,j,i))/rho_new;
-          Real ein_new = cons(IEN,k,j,i)-kin_new;
-          cons(IEN,k,j,i) = scalefac*(ein_old + kin_new);
-        }
-      }
-    }
-
-    scalefac = 1.0;
-    printf("scale factor (AFTER MESHBLOCK): %g\n", scalefac);
-  }
-  return;
-}
+//void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
+//                    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+//                    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+//                    AthenaArray<Real> &cons_scalar) {
+//
+//  int il = pmb->is-NGHOST;
+//  int iu = pmb->ie+NGHOST;
+//  int jl = pmb->js;
+//  int ju = pmb->je;
+//  int kl = pmb->ks;
+//  int ku = pmb->ke;
+//
+//  if (std::fabs(scalefac - 1.0) < TINY_NUMBER) { // Scale factor is 1
+//    return;
+//
+//  } else { // Scale factor other than 1
+//    printf("scale factor (MESHBLOCK): %g\n", scalefac);
+//
+//    dens_base *= scalefac;
+//    vinflow /= scalefac;
+//
+//    printf("dens_base (MESHBLOCK): %g\n", dens_base);
+//    printf("vinflow (MESHBLOCK): %g\n", vinflow);
+//
+//    for (int k = kl; k <= ku; k++) {
+//      for (int j = jl; j <= ju; j++) {
+//        for (int i = il; i <= iu; i++) {
+//
+//
+//          // Calculate the gas internal energy before the scaling
+//          Real rho_old = cons(IDN,k,j,i);
+//          printf("i=%03d --- density before:  %g\n", i, rho_old);
+//          Real kin_old = 0.5*SQR(cons(IM1,k,j,i))/rho_old;
+//          Real ein_old = cons(IEN,k,j,i)-kin_old;
+//
+//          // Scale the conserved variables
+//          cons(IDN,k,j,i) *= scalefac;
+//          Real rho_new = cons(IDN,k,j,i);
+//          printf("      --- density after:   %g\n", rho_new);
+//
+//          // Gas total energy after scaling
+//          Real kin_new = 0.5*SQR(cons(IM1,k,j,i))/rho_new;
+//          Real ein_new = cons(IEN,k,j,i)-kin_new;
+//          cons(IEN,k,j,i) = scalefac*(ein_old + kin_new);
+//        }
+//      }
+//    }
+//
+//    scalefac = 1.0;
+//    printf("scale factor (AFTER MESHBLOCK): %g\n", scalefac);
+//  }
+//  return;
+//}
 
 
 void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
@@ -214,12 +213,13 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   // Allocate user meshblock data arrays
   AllocateRealUserMeshBlockDataField(3);
   ruser_meshblock_data[0].NewAthenaArray(nx1+1);
-  ruser_meshblock_data[1].NewAthenaArray(nx3, nx2, nx1);
+  ruser_meshblock_data[1].NewAthenaArray(nx1+1);
   ruser_meshblock_data[2].NewAthenaArray(nx3, nx2, nx1);
 
   // Allocate user output variables and set their names
   AllocateUserOutputVariables(Uov::NUM_UOV);
   SetUserOutputVariableName(Uov::GRAD_P_ACCEL, "grad_p_accel");
+  SetUserOutputVariableName(Uov::GRAD_P_ESTIMATE, "grad_p_estimate");
   SetUserOutputVariableName(Uov::GRAV_ACCEL, "grav_accel");
   SetUserOutputVariableName(Uov::RAD_ACCEL, "rad_accel");
   SetUserOutputVariableName(Uov::NET_ACCEL, "net_accel");
@@ -266,14 +266,16 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
         // Gas acceleration per timestep due to gravity
         uov(Uov::GRAV_ACCEL, k, j, i) = -src / dt / rho;
 
-
         // Calculate pressure gradient
         AthenaArray<Real> &flx = ruser_meshblock_data[0];
         Real dflx = x1area(i+1)*flx(i+1) - x1area(i)*flx(i);
-        uov(Uov::GRAD_P_ACCEL, k, j, i) = dflx / vol(i) / rho;
+        uov(Uov::GRAD_P_ACCEL, k, j, i) = -dflx / vol(i) / rho;
+
+        AthenaArray<Real> &wipr = ruser_meshblock_data[1];
+        uov(Uov::GRAD_P_ESTIMATE, k, j, i) = -(x1area(i+1)*wipr(i+1) - x1area(i)*wipr(i))/vol(i)/rho;
 
         // Copy over meshblock data for RadSource1
-        uov(Uov::RAD_ACCEL, k, j, i) = ruser_meshblock_data[2](k, j, i) / dt / rho;
+        uov(Uov::RAD_ACCEL, k, j, i) = ruser_meshblock_data[2](k,j,i) / dt / rho;
 
         // Sum up net acceleration
         uov(Uov::NET_ACCEL, k, j, i) = uov(Uov::GRAD_P_ACCEL,k,j,i)
@@ -434,9 +436,10 @@ void RadFixedInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
       for (int i=il-ngh; i<=il-1; ++i) {
 	Real x1v = pmb->pcoord->x1v(i);
 	Real Fr_edd = 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1v));
-	Real cs2 = pow(Er,0.25);
-	Real bern = 0.5*(SQR(vinflow)-SQR(pnrrad->crat)/x1v)+gfac*cs2;
-	Real Fr_target = Fr_edd*(edot-mdot/(2.*PI*pow(pnrrad->crat,3))*bern);
+  Real Utot = 1.5*w(IPR,k,j,i) + Er;
+  Real Ptot = w(IPR,k,j,i) + 1./3.*Er;
+  Real bern = 0.5*SQR(vinflow) - 0.5*SQR(pnrrad->crat)/x1v + (Utot + Ptot)/w(IDN,k,j,i);
+	Real Fr_target = Fr_edd*(edot-mdot/(2.*PI*std::pow(pnrrad->crat,3.0))*bern);
         for (int ifr=0; ifr<pnrrad->nfreq; ++ifr) {
           Real *lab_ir = &(ir(k, j, i, ifr*pnrrad->nang));
           Real *mu     = &(pnrrad->mu(0, k, j, i, ifr*pnrrad->nang));
