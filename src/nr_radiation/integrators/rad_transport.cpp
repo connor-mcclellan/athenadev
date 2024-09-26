@@ -108,6 +108,44 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
       // calculate flux with HLLE type flux
       //(smax F(u_L) - Smin F(U_R))/(smax-smin)+smax*smin(u(R)-u_L)/(smax-smin)
       for (int i=is; i<=ie+1; ++i) {
+
+        //BCM: Print out reconstructed interface intensities
+//        for (int n=0; n<prad->nang; ++n) {
+//          if (i==161) {
+//            if (n==0) printf("\n161l\n");
+//            printf("%g\n",il_(i,n));
+//          } else if (i==162) {
+//            if (n==0) printf("\n162l\n");
+//            printf("%g\n",il_(i,n));
+//          } else if (i==163) {
+//            if (n==0) printf("\n163l\n");
+//            printf("%g\n",il_(i,n));
+//          } else if (i==164) {
+//            if (n==0) printf("\n164l\n");
+//            printf("%g\n",il_(i,n));
+//          }
+//        }
+//
+//        for (int n=0; n<prad->nang; ++n) {
+//          if (i==160) {
+//            if (n==0) printf("\n160r\n");
+//            printf("%g\n",ir_(i,n));
+//          } else if (i==161) {
+//            if (n==0) printf("\n161r\n");
+//            printf("%g\n",ir_(i,n));
+//          } else if (i==162) {
+//            if (n==0) printf("\n162r\n");
+//            printf("%g\n",ir_(i,n));
+//          } else if (i==163) {
+//            if (n==0) printf("\n163r\n");
+//            printf("%g\n",ir_(i,n));
+//          } else if (i==164) {
+//            if (n==0) printf("\n164r\n");
+//            printf("%g\n",ir_(i,n));
+//          }
+//        }
+
+
         Real *vel = &(velx_(k,j,i,0));
         Real *smax = &(sfac1_x_(i,0));
         Real *smin = &(sfac2_x_(i,0));
@@ -156,6 +194,26 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
           }
         }
       }
+//      for (int i=is; i<=ie+1; ++i) {
+//        for (int n=0; n<prad->nang; ++n) {
+//          if (i==160) {
+//            if (n==0) printf("\n160\n");
+//            printf("%g %g %g %g\n",prad->wmu(n), prad->mu(0,k,j,i,n), ir(k,j,i,n), x1flux(k,j,i,n)/prad->reduced_c/prad->mu(0,k,j,i,n));
+//          } else if (i==161) {
+//            if (n==0) printf("\n161\n");
+//            printf("%g %g %g %g\n",prad->wmu(n), prad->mu(0,k,j,i,n), ir(k,j,i,n), x1flux(k,j,i,n)/prad->reduced_c/prad->mu(0,k,j,i,n));
+//          } else if (i==162) {
+//            if (n==0) printf("\n162\n");
+//            printf("%g %g %g %g\n",prad->wmu(n), prad->mu(0,k,j,i,n), ir(k,j,i,n), x1flux(k,j,i,n)/prad->reduced_c/prad->mu(0,k,j,i,n));
+//          } else if (i==163) {
+//            if (n==0) printf("\n163\n");
+//            printf("%g %g %g %g\n",prad->wmu(n), prad->mu(0,k,j,i,n), ir(k,j,i,n), x1flux(k,j,i,n)/prad->reduced_c/prad->mu(0,k,j,i,n));
+//          } else if (i==164) {
+//            if (n==0) printf("\n164\n");
+//            printf("%g %g %g %g\n",prad->wmu(n), prad->mu(0,k,j,i,n), ir(k,j,i,n), x1flux(k,j,i,n)/prad->reduced_c/prad->mu(0,k,j,i,n));
+//          }
+//        }
+//      }
     }
   }
 
@@ -471,6 +529,31 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
       }
     }
   }
+  // BCM: Print out angular fluxes
+//  for (int k=ks; k<=ke; ++k) {
+//    for (int j=js; j<=je; ++j) {
+//      for (int i=is; i<=ie; ++i) {
+//        for (int n=0; n<prad->nang; ++n) {
+//           if (i==160) {
+//            if (n==0) printf("\n160\n");
+//            printf("%g\n",-zeta_flux_(k,j,i,0,n)/prad->reduced_c);
+//          } else if (i==161) {
+//            if (n==0) printf("\n161\n");
+//            printf("%g\n",-zeta_flux_(k,j,i,0,n)/prad->reduced_c);
+//          } else if (i==162) {
+//            if (n==0) printf("\n162\n");
+//            printf("%g\n",-zeta_flux_(k,j,i,0,n)/prad->reduced_c);
+//          } else if (i==163) {
+//            if (n==0) printf("\n163\n");
+//            printf("%g\n",-zeta_flux_(k,j,i,0,n)/prad->reduced_c);
+//          } else if (i==164) {
+//            if (n==0) printf("\n164\n");
+//            printf("%g\n",-zeta_flux_(k,j,i,0,n)/prad->reduced_c);
+//          }
+//        }
+//      }
+//    }
+//  }
 }
 
 
@@ -516,6 +599,8 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &ir, const int order) {
 
       // calculate flux with velocity times the interface state
       for (int i=is; i<=ie+1; ++i) {
+
+
         Real &vel = adv_vel(0,k,j,i);
         if (vel >0) {
           for (int n=0; n<prad->n_fre_ang; ++n) {
@@ -722,6 +807,7 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
                       &ang_vol = ang_vol_, &dflx_ang = dflx_ang_;
   int &nzeta = prad->nzeta, &npsi = prad->npsi;
 
+
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
       // calculate x1-flux divergence
@@ -731,6 +817,11 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
         Real *flxl = &(x1flux(k,j,i,0));
         Real *flxn = &(dflx(i,0));
         for (int n=0; n<prad->n_fre_ang; ++n) {
+
+          //BCM: added for UOV difference
+          pmb->ruser_meshblock_data[4](k,j,i,n) = ir_in(k,j,i,n);
+          pmb->ruser_meshblock_data[10](k,j,i,n) = ir_in(k,j,i,n);
+
           flxn[n] = (x1area(i+1) *flxr[n] - x1area(i)*flxl[n]);
 //          std::cout.precision(17);
 //          if ((i==5) && (n==1))
@@ -777,6 +868,10 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
 //          if ((i==5) && (n==1))
 //            std::cout << "i=" << i << "    n=" << n << "    flxn=" << flxn[n] << "    -wght*flxn[n]/vol(i) = " << debug_fldiv << "    Ir = " << irin[n] << std::endl;
           iro[n] = std::max(irin[n]-wght*flxn[n]/vol(i), static_cast<Real>(TINY_NUMBER));
+          pmb->ruser_meshblock_data[4](k,j,i,n) = iro[n] - pmb->ruser_meshblock_data[4](k,j,i,n);
+          pmb->ruser_meshblock_data[10](k,j,i,n) = iro[n] - pmb->ruser_meshblock_data[10](k,j,i,n);
+          pmb->ruser_meshblock_data[8](k,j,i,n) = iro[n];
+          pmb->ruser_meshblock_data[14](k,j,i,n) = iro[n];
           //iro[n] = iro[n]-wght*flxn[n]/vol(i);
         }
       }
@@ -832,7 +927,7 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
             for (int n=0; n<prad->nang; ++n) {
               iro[n] = std::max(iro[n]-wght*flxn[n]/angv[n],
                                 static_cast<Real>(TINY_NUMBER));
-              //iro[n] = iro[n]-wght*flxn[n]/angv[n];
+            //  //iro[n] = iro[n]-wght*flxn[n]/angv[n];
             }
           }
         }
@@ -855,6 +950,19 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
               iro[n] /= (1.0 + ang_coef[n]);
             }
           }
+        }
+      }
+    }
+  }
+  //BCM: Calculate the contribution to the flux from the divergence piece
+  for (int k=ks; k<=ke; ++k) {
+    for (int j=js; j<=je; ++j) {
+      for (int i=is; i<=ie; ++i) {
+        Real *iro = &(ir_out(k,j,i,0));
+        for (int n=0; n<prad->nang; ++n) {
+          pmb->ruser_meshblock_data[8](k,j,i,n) = iro[n] - pmb->ruser_meshblock_data[8](k,j,i,n);
+          pmb->ruser_meshblock_data[14](k,j,i,n) = iro[n] - pmb->ruser_meshblock_data[14](k,j,i,n);
+          //if (i==2 && j==0 && k==0) printf("intensity difference (n=%d): %g\n", n, dflx_com);
         }
       }
     }

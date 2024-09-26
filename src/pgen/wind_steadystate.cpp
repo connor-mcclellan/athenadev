@@ -211,10 +211,23 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   }
 
   // Allocate user meshblock data arrays
-  AllocateRealUserMeshBlockDataField(3);
+  AllocateRealUserMeshBlockDataField(16);
   ruser_meshblock_data[0].NewAthenaArray(nx1+1);
   ruser_meshblock_data[1].NewAthenaArray(nx1+1);
   ruser_meshblock_data[2].NewAthenaArray(nx3, nx2, nx1);
+  ruser_meshblock_data[3].NewAthenaArray(nx3, nx2, nx1);
+  ruser_meshblock_data[4].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[5].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[6].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[7].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[8].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[9].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[10].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[11].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[12].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[13].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[14].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[15].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
 
   // Allocate user output variables and set their names
   AllocateUserOutputVariables(Uov::NUM_UOV);
@@ -227,6 +240,18 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   SetUserOutputVariableName(Uov::EDOT, "edot");
   SetUserOutputVariableName(Uov::CSOUND, "csound");
   SetUserOutputVariableName(Uov::TRAD_OVER_TGAS, "trad_over_tgas");
+  SetUserOutputVariableName(Uov::DIVFLX, "divflx");
+  SetUserOutputVariableName(Uov::SRCFLX, "srcflx");
+  SetUserOutputVariableName(Uov::DIV_ER, "div_er");
+  SetUserOutputVariableName(Uov::SRC_ER, "src_er");
+  SetUserOutputVariableName(Uov::DIVFLX_ANG, "divflx_ang");
+  SetUserOutputVariableName(Uov::DIV_ER_ANG, "div_er_ang");
+  SetUserOutputVariableName(Uov::DIVFLX_LAB, "divflx_lab");
+  SetUserOutputVariableName(Uov::SRCFLX_LAB, "srcflx_lab");
+  SetUserOutputVariableName(Uov::DIV_ER_LAB, "div_er_lab");
+  SetUserOutputVariableName(Uov::SRC_ER_LAB, "src_er_lab");
+  SetUserOutputVariableName(Uov::DIVFLX_ANG_LAB, "divflx_ang_lab");
+  SetUserOutputVariableName(Uov::DIV_ER_ANG_LAB, "div_er_ang_lab");
   return;
 }
 
@@ -244,27 +269,10 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
       for (int i = is-NGHOST; i <= ie+NGHOST; i++) {
 
         Real rho = phydro->u(IDN, k, j, i);
-
-        // Calculate explicit gravity source term
-
-        // Left and right cell faces
-        Real rl = pcoord->x1f(i);
-        Real rr = pcoord->x1f(i + 1);
-        Real rc = pcoord->x1v(i);
-
-        // Gravitational parameter
-        Real gm = 0.5 * SQR(pnrrad->crat);
-
-        // Gravitational potential
-        Real phil = -gm/rl;
-        Real phir = -gm/rr;
-
-        // Source term - force per unit volume
         Real dt = pmy_mesh->dt;
-        Real src = - dt * rho * (phir - phil) / (rr - rl);
 
         // Gas acceleration per timestep due to gravity
-        uov(Uov::GRAV_ACCEL, k, j, i) = -src / dt / rho;
+        uov(Uov::GRAV_ACCEL, k, j, i) = ruser_meshblock_data[3](k,j,i);
 
         // Calculate pressure gradient
         AthenaArray<Real> &flx = ruser_meshblock_data[0];
@@ -274,7 +282,7 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
         AthenaArray<Real> &wipr = ruser_meshblock_data[1];
         uov(Uov::GRAD_P_ESTIMATE, k, j, i) = -(x1area(i+1)*wipr(i+1) - x1area(i)*wipr(i))/vol(i)/rho;
 
-        // Copy over meshblock data for RadSource1
+        // Copy over meshblock data for rad_accel
         uov(Uov::RAD_ACCEL, k, j, i) = ruser_meshblock_data[2](k,j,i) / dt / rho;
 
         // Sum up net acceleration
@@ -282,10 +290,37 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
                                        - uov(Uov::GRAV_ACCEL,k,j,i)
                                        + uov(Uov::RAD_ACCEL,k,j,i);
 
-        uov(Uov::MDOT, k, j, i) = 4.0*PI*SQR(rc)*phydro->u(IM1,k,j,i);
+        uov(Uov::MDOT, k, j, i) = 4.0*PI*SQR(pcoord->x1v(i))*phydro->u(IM1,k,j,i);
 
         Real press = (phydro->u(IEN,k,j,i) - 0.5*SQR(phydro->u(IM1,k,j,i)/rho)) * (gamma - 1.0);
         uov(Uov::CSOUND,k,j,i) = (std::sqrt(press / rho));
+
+        uov(Uov::DIVFLX,k,j,i) = 0.0;
+        uov(Uov::DIV_ER,k,j,i) = 0.0;
+        uov(Uov::SRCFLX,k,j,i) = 0.0;
+        uov(Uov::SRC_ER,k,j,i) = 0.0;
+        uov(Uov::DIVFLX_ANG,k,j,i) = 0.0;
+        uov(Uov::DIV_ER_ANG,k,j,i) = 0.0;
+        uov(Uov::DIVFLX_LAB,k,j,i) = 0.0;
+        uov(Uov::DIV_ER_LAB,k,j,i) = 0.0;
+        uov(Uov::SRCFLX_LAB,k,j,i) = 0.0;
+        uov(Uov::SRC_ER_LAB,k,j,i) = 0.0;
+        uov(Uov::DIVFLX_ANG_LAB,k,j,i) = 0.0;
+        uov(Uov::DIV_ER_ANG_LAB,k,j,i) = 0.0;
+        for (int n = 0; n<pnrrad->nang; ++n) {
+          uov(Uov::DIVFLX,k,j,i) += ruser_meshblock_data[4](k,j,i,n);
+          uov(Uov::SRCFLX,k,j,i) += ruser_meshblock_data[5](k,j,i,n);
+          uov(Uov::DIV_ER,k,j,i) += ruser_meshblock_data[6](k,j,i,n);
+          uov(Uov::SRC_ER,k,j,i) += ruser_meshblock_data[7](k,j,i,n);
+          uov(Uov::DIVFLX_ANG,k,j,i) += ruser_meshblock_data[8](k,j,i,n);
+          uov(Uov::DIV_ER_ANG,k,j,i) += ruser_meshblock_data[9](k,j,i,n);
+          uov(Uov::DIVFLX_LAB,k,j,i) += ruser_meshblock_data[10](k,j,i,n);
+          uov(Uov::SRCFLX_LAB,k,j,i) += ruser_meshblock_data[11](k,j,i,n);
+          uov(Uov::DIV_ER_LAB,k,j,i) += ruser_meshblock_data[12](k,j,i,n);
+          uov(Uov::SRC_ER_LAB,k,j,i) += ruser_meshblock_data[13](k,j,i,n);
+          uov(Uov::DIVFLX_ANG_LAB,k,j,i) += ruser_meshblock_data[14](k,j,i,n);
+          uov(Uov::DIV_ER_ANG_LAB,k,j,i) += ruser_meshblock_data[15](k,j,i,n);
+        }
       }
     }
   }
@@ -344,7 +379,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     }
   }
 
-  if (IM_RADIATION_ENABLED) {
+  if (IM_RADIATION_ENABLED || NR_RADIATION_ENABLED) {
     for (int k = ks; k <= ke; k++) {
       for (int j = js; j <= je; j++) {
         for (int i = is-NGHOST; i <= ie+NGHOST; i++) {

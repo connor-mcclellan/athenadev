@@ -32,7 +32,7 @@ void HydroSourceTerms::PointMass(const Real dt, const AthenaArray<Real> *flux,
         Real den = prim(IDN,k,j,i);
         Real src = dt*den*pmb->pcoord->coord_src1_i_(i)*gm_/pmb->pcoord->x1v(i);
         cons(IM1,k,j,i) -= src;
-        pmb->ruser_meshblock_data[Uov::GRAV_ACCEL](k,j,i) = -src / dt / den;
+        pmb->ruser_meshblock_data[3](k,j,i) = src / dt / den;
         if (NON_BAROTROPIC_EOS) {
           cons(IEN,k,j,i) -=
               dt*0.5*(pmb->pcoord->phy_src1_i_(i)*flux[X1DIR](IDN,k,j,i)*gm_

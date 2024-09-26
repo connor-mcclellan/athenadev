@@ -64,6 +64,7 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
   int &nang =prad->nang;
   int &nfreq=prad->nfreq;
 
+
   // Get the temporary arrays
   AthenaArray<Real> &wmu_cm = wmu_cm_;
   AthenaArray<Real> &tran_coef = tran_coef_;
@@ -92,6 +93,10 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
   // Prepare the transformation coefficients
   Real numsum = 0.0;
 
+  // BCM: Add mu here as well so we can get the flux contribution in uov
+  Real *mu = &(prad->mu(0, k, j, i, prad->nang));
+  Real mu_cm[nang];
+
   for (int n=0; n<nang; ++n) {
     Real vdotn = vx * prad->mu(0,k,j,i,n) + vy * prad->mu(1,k,j,i,n)
                 + vz * prad->mu(2,k,j,i,n);
@@ -100,12 +105,20 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
     wmu_cm(n) = prad->wmu(n)/(tran_coef(n) * tran_coef(n));
     numsum += wmu_cm(n);
     cm_to_lab(n) = tran_coef(n)*tran_coef(n)*tran_coef(n)*tran_coef(n);
+    mu_cm[n] = (mu[n] - (lorz * vx*invcrat) * (1.0 - lorz / (lorz + 1.0)
+               * (vx*invcrat * mu[n]))) / tran_coef(n);
   }
            // Normalize weight in co-moving frame to make sure the sum is one
   numsum = 1.0/numsum;
 
   for (int n=0; n<nang; ++n) {
     wmu_cm(n) *= numsum;
+  }
+
+  //BCM: store the intensities before and after the source term step
+  Real ir_before_lab[nang];
+  for (int n=0; n<nang; ++n) {
+    ir_before_lab[n] = ir_ini(k,j,i,n);
   }
 
   for (int ifr=0; ifr<nfreq; ++ifr) {
@@ -144,6 +157,13 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
       }
     }
   }
+
+  //BCM: store the intensities before and after the source term step
+  Real ir_before[nang];
+  for (int n=0; n<nang; ++n) {
+    ir_before[n] = ir_cm(n);
+  }
+
   if (nfreq == 1) {
   // Add absorption and scattering opacity source
     tgas_new_(k,j,i) = AbsorptionScattering(wmu_cm,tran_coef, sigma_at, sigma_p,
@@ -227,6 +247,39 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
     }
   }
 
+  //BCM: debug outputs, split transport and source term piece of the flux and energy density
+  Real irweight_com = 0.0;
+  Real irweight_lab = 0.0;
+  for (int n=0; n<nang; ++n) {
+
+    irweight_com = (ir_cm(n) - ir_before[n])*wmu_cm(n);
+    irweight_lab = (ir_cm(n)/cm_to_lab(n) - ir_before_lab[n])*prad->wmu(n);
+
+    // Transport step flux and energy density
+    pmb->ruser_meshblock_data[4](k,j,i,n) *= cm_to_lab(n)*wmu_cm(n); // com Ir * weight
+    pmb->ruser_meshblock_data[8](k,j,i,n) *= cm_to_lab(n)*wmu_cm(n); // com Ir * weight
+    pmb->ruser_meshblock_data[10](k,j,i,n) *= prad->wmu(n);          // lab Ir * weight
+    pmb->ruser_meshblock_data[14](k,j,i,n) *= prad->wmu(n);          // lab Ir * weight
+
+    // Copy Ir * weight to energy density terms
+    pmb->ruser_meshblock_data[6](k,j,i,n) = pmb->ruser_meshblock_data[4](k,j,i,n); // com div Er
+    pmb->ruser_meshblock_data[9](k,j,i,n) = pmb->ruser_meshblock_data[8](k,j,i,n); // angular com div Er
+    pmb->ruser_meshblock_data[12](k,j,i,n) = pmb->ruser_meshblock_data[10](k,j,i,n); // lab div Er
+    pmb->ruser_meshblock_data[15](k,j,i,n) = pmb->ruser_meshblock_data[14](k,j,i,n); // angular com div Er
+
+    // Now multiply through by angle to get the fluxes
+    pmb->ruser_meshblock_data[4](k,j,i,n) *= mu_cm[n]; // com divflx
+    pmb->ruser_meshblock_data[8](k,j,i,n) *= mu_cm[n]; // angular com divflx
+    pmb->ruser_meshblock_data[10](k,j,i,n) *= prad->mu(0,k,j,i,n); // lab divflx
+    pmb->ruser_meshblock_data[14](k,j,i,n) *= prad->mu(0,k,j,i,n); // angular lab divflx
+
+    // Sourceterm step flux and energy density
+    pmb->ruser_meshblock_data[5](k,j,i,n) = irweight_com*mu_cm[n];
+    pmb->ruser_meshblock_data[7](k,j,i,n) = irweight_com;
+    pmb->ruser_meshblock_data[11](k,j,i,n) = irweight_lab*prad->mu(0,k,j,i,n); // lab src flux
+    pmb->ruser_meshblock_data[13](k,j,i,n) = irweight_lab; // lab src energy
+  }
+
   // update specific intensity in the lab frame
   // do not modify ir_ini
   Real omega = 1.0;
@@ -244,6 +297,7 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
       }
     }
   } else {
+    printf("IR_OLD MODIFIED IN SRC TERM\n");
     for (int ifr=0; ifr<nfreq; ++ifr) {
       lab_ir = &(ir(k,j,i,nang*ifr));
       for (int n=0; n<nang; ++n) {
@@ -255,6 +309,7 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
     }
     tgas_new_(k,j,i) = omega_1*tgas_(k,j,i) + omega*tgas_new_(k,j,i);
   }
+
 }
 
 
@@ -518,6 +573,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
 
         // Now apply the radiation source terms to gas with energy and
         // momentum conservation
+
         pmb->ruser_meshblock_data[2](k,j,i) = -prat*delta_frx*invredc;
         rad_source(0,k,j,i) = (-prat*delta_er  * invredfactor);
         rad_source(1,k,j,i) = (-prat*delta_frx * invredc);
