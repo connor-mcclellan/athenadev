@@ -334,7 +334,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real x1min = pmy_mesh->mesh_size.x1min;
   Real x1max = pcoord->x1f(ie+NGHOST+1);
 
-  Real Fr_com_target = 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1min));
+  Real Fr_com_target = edot * 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1min));
 
   for (int k = ks; k <= ke; k++) {
     for (int j = js; j <= je; j++) {
@@ -392,14 +392,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           Real tau = SQR(x1min) * dens_base * (1./x - 1./x1max);
           Real Er_com_target = 3. * Fr_com_target * tau;
 
-          for (int ifr = 0; ifr < pnrrad->nfreq; ++ifr) {
-            int n0 = ifr*pnrrad->nang;
-            Real *lab_ir = &(pnrrad->ir(k, j, i, n0));
-            Real *mu     = &(pnrrad->mu(0, k, j, i, n0));
-            Real *wmu    = &(pnrrad->wmu(n0));
-            SetLabIr(lab_ir, mu, wmu, pnrrad->nang, Er_com_target, Fr_com_target,
-                vinflow/pnrrad->crat, k, j, i);
-          }
+          Real *lab_ir = &(pnrrad->ir(k, j, i, 0));
+          Real *mu     = &(pnrrad->mu(0, k, j, i, 0));
+          Real *wmu    = &(pnrrad->wmu(0));
+          SetLabIr(lab_ir, mu, wmu, pnrrad->nang, Er_com_target, Fr_com_target,
+                   vinflow/pnrrad->crat, k, j, i);
+          //SetLabIr(lab_ir, mu, wmu, pnrrad->nang, Er_com_target, Fr_com_target,
+          //         0.0, k, j, i);
         }
       }
     }
@@ -458,29 +457,31 @@ void RadFixedInnerX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
     for (int j = jl; j <= ju; ++j) {
 
       // Get the lab frame energy density in first active zone
-      Real Er = 0.0;
-      for (int ifr=0; ifr<pnrrad->nfreq; ++ifr) {
-        Real *lab_ir = &(ir(k, j, il, ifr*pnrrad->nang));
-        Real *wmu    = &(pnrrad->wmu(ifr*pnrrad->nang));
-        for (int n=0; n<pnrrad->nang; n++) {
-          Er += lab_ir[n] * wmu[n];
-        }
+      Real Er_above = 0.0;
+      for (int n=0; n<pnrrad->nang; n++) {
+        Er_above += ir(k,j,il,n) * pnrrad->wmu(n);
       }
 
       // Set intensity in ghost zones
-      for (int i=il-ngh; i<=il-1; ++i) {
-	Real x1v = pmb->pcoord->x1v(i);
-	Real Fr_edd = 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1v));
-  Real Utot = 1.5*w(IPR,k,j,i) + Er;
-  Real Ptot = w(IPR,k,j,i) + 1./3.*Er;
-  Real bern = 0.5*SQR(vinflow) - 0.5*SQR(pnrrad->crat)/x1v + (Utot + Ptot)/w(IDN,k,j,i);
-	Real Fr_target = Fr_edd*(edot-mdot/(2.*PI*std::pow(pnrrad->crat,3.0))*bern);
-        for (int ifr=0; ifr<pnrrad->nfreq; ++ifr) {
-          Real *lab_ir = &(ir(k, j, i, ifr*pnrrad->nang));
-          Real *mu     = &(pnrrad->mu(0, k, j, i, ifr*pnrrad->nang));
-          Real *wmu    = &(pnrrad->wmu(ifr*pnrrad->nang));
-          SetLabIr(lab_ir, mu, wmu, pnrrad->nang, Er, Fr_target, 0., k, j, i);
-        }
+      for (int i=il-1; i>=il-ngh; --i) {
+        Real x1v = pmb->pcoord->x1v(i);
+        Real Fr_edd = 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1v));
+        Real Utot = 1.5*w(IPR,k,j,i) + Er_above;
+        Real Ptot = w(IPR,k,j,i) + 1./3.*Er_above;
+        Real bern = 0.5*SQR(vinflow) - 0.5*SQR(pnrrad->crat)/x1v + (Utot + Ptot)/w(IDN,k,j,i);
+        Real Fr_target = Fr_edd*(edot-mdot/(2.*PI*std::pow(pnrrad->crat,3.0))*bern);
+        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0)
+                          + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0))
+                          * (pco->x1v(i+1) - pco->x1v(i));
+        //Real Er = Er_above + 3.0 * Fr_target * tau_avg;
+
+        Real *lab_ir = &(ir(k, j, i, 0));
+        Real *mu     = &(pnrrad->mu(0, k, j, i, 0));
+        Real *wmu    = &(pnrrad->wmu(0));
+        Real beta    = w(IVX,k,j,i)/pnrrad->crat;
+        SetLabIr(lab_ir, mu, wmu, pnrrad->nang, Er_above, Fr_target, beta, k, j, i);
+
+        //Er_above = Er;
       }
     }
   }
@@ -501,20 +502,15 @@ void RadVacuumOuterX1(MeshBlock *pmb, Coordinates *pco, NRRadiation *pnrrad,
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
       for (int i=iu+1; i<=iu+ngh; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for (int n=0; n<nang; ++n) {
+        for (int n=0; n<nang; ++n) {
+          Real mux = pnrrad->mu(0,k,j,i,n);
 
-            int ang=ifr*nang+n;
-	    Real mux= pnrrad->mu(0,k,j,iu,n);
-
-            // If the radiation angle is outward, copy the intensity into the ghost zones
-	    if(mux > 0.0){
-	      ir(k,j,i,ang) = ir(k,j,iu,ang);
-
-            // If the radiation angle is inward, enforce no inward flux
-	    } else {
-	      ir(k,j,i,ang) = 0.0;
-	    }
+          // If the radiation angle is outward, copy the intensity into the ghost zones
+          if(mux > 0.0){
+            ir(k,j,i,n) = ir(k,j,iu,n);
+          // If the radiation angle is inward, enforce no inward flux
+          } else {
+            ir(k,j,i,n) = 0.0;
           }
         }
       }
@@ -531,57 +527,48 @@ void FixedInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, Fac
   // for BC loop limit documentation
   // Here we set "ix1" primitive hydro variables
 
-
-  //printf("vinflow in inner BC: %g\n", vinflow);
-
+  Real x1min = pmb->pmy_mesh->mesh_size.x1min;
   NRRadiation *pnrrad = pmb->pnrrad;
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
 
-      // Calculate the radiation energy density from the specific intensity at the
-      // inner x1 boundary
-      // "il" is the index of the first active zone, which is il=2 for ngh=2
-      Real Er = 0.0;
-      for (int ifr=0; ifr<pnrrad->nfreq; ++ifr) {
-
-        // Lab frame intensity, weights for each angle
-        Real *lab_ir = &(pnrrad->ir(k, j, il, ifr*pnrrad->nang));
-        Real *wmu    = &(pnrrad->wmu(ifr*pnrrad->nang));
-
-        // Integrate I_r times weights to get zeroth order moment (energy density)
-        for (int n=0; n<pnrrad->nang; n++) {
-          Er += lab_ir[n] * wmu[n];
-        }
+      // Calculate energy density in first active zone
+      Real Er_above = 0.0;
+      for (int n=0; n < pnrrad->nang; n++) {
+        Er_above += pnrrad->ir(k,j,il,n) * pnrrad->wmu(n);
       }
 
-      // Now set the ghost zones such that the radiation field and the gas are
-      // roughly in equilibrium -- P_rad ~ P_gas in the first active zone
-      for (int i=il-ngh; i<=il-1; ++i) {
+      for (int i=il-1; i>=il-ngh; --i) {
+        Real x1v = pmb->pcoord->x1v(i);
+        Real Fr_edd = 0.5 * SQR(pnrrad->crat) / pnrrad->prat / (SQR(x1v));
+        Real Utot = 1.5*prim(IPR,k,j,i) + Er_above;
+        Real Ptot = prim(IPR,k,j,i) + 1./3.*Er_above;
+        Real bern = 0.5*SQR(vinflow) - 0.5*SQR(pnrrad->crat)/x1v + (Utot + Ptot)/prim(IDN,k,j,i);
+        Real Fr_target = Fr_edd*(edot-mdot/(2.*PI*std::pow(pnrrad->crat,3.0))*bern);
+        Real tau_avg = 0.5*(pnrrad->sigma_s(k,j,i,0)+pnrrad->sigma_a(k,j,i,0)
+                          + pnrrad->sigma_s(k,j,i+1,0)+pnrrad->sigma_a(k,j,i+1,0))
+                          * (pco->x1v(i+1) - pco->x1v(i));
+        //Real Er = Er_above + 3.0 * Fr_target * tau_avg;
+        //Real temp = std::pow(Er, 0.25);
+        Real temp = std::pow(Er_above, 0.25);
+
         for (int n=0; n<=NHYDRO; n++) {
-
-          // Density
           if (n == IDN) {
-              prim(n, k, j, i) = dens_base;
-
-          // Pressure
-            } else if (n == IPR) {
-	      Real tgas = pow(Er,0.25);
-              prim(n, k, j, i) = prim(IDN, k, j, il) * tgas;
-
-          // Radial velocity
-            } else if (n == IVX) {
-              prim(n, k, j, i) = vinflow;
-
-          // Other
-            } else {
-              // Just copy the value of the first active zone into the ghost zones
-              prim(n, k, j, i) = prim(n, k, j, il);
-            }
+            prim(n, k, j, i) = dens_base * pow(x1v/x1min, -2);
+          } else if (n == IPR) {
+            prim(n, k, j, i) = prim(IDN,k,j,i)*temp;
+          } else if (n == IVX) {
+            prim(n, k, j, i) = vinflow;
+          } else {
+            prim(n, k, j, i) = prim(n, k, j, il);
           }
         }
+        //Er_above = Er;
       }
+    }
   }
   return;
+
 }
 
 void VacuumOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
