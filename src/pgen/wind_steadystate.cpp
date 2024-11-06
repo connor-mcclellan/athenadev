@@ -53,6 +53,7 @@ namespace {
   Real r0;        // Length
 
   Real scalefac;  // Scaling factor for solution
+  Real absfact; // Fraction of scattering opacity to use for absorption opacity
 
   // Coordinate information for user output variables
   AthenaArray<Real> x1area;
@@ -124,6 +125,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   vinflow = mdot/(4.*PI*dens_base*SQR(mesh_size.x1min));
 
   scalefac = pin->GetReal("problem", "scalefac");
+  absfact = pin->GetReal("problem", "absfact");
   printf("scale factor (MESH): %g\n", scalefac);
   printf("dens_base (MESH): %g\n", dens_base);
   printf("vinflow (MESH): %g\n", vinflow);
@@ -211,7 +213,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   }
 
   // Allocate user meshblock data arrays
-  AllocateRealUserMeshBlockDataField(16);
+  AllocateRealUserMeshBlockDataField(18);
   ruser_meshblock_data[0].NewAthenaArray(nx1+1);
   ruser_meshblock_data[1].NewAthenaArray(nx1+1);
   ruser_meshblock_data[2].NewAthenaArray(nx3, nx2, nx1);
@@ -228,6 +230,8 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   ruser_meshblock_data[13].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
   ruser_meshblock_data[14].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
   ruser_meshblock_data[15].NewAthenaArray(nx3, nx2, nx1, pnrrad->nang);
+  ruser_meshblock_data[16].NewAthenaArray(nx3, nx2, nx1);
+  ruser_meshblock_data[17].NewAthenaArray(nx3, nx2, nx1);
 
   // Allocate user output variables and set their names
   AllocateUserOutputVariables(Uov::NUM_UOV);
@@ -252,6 +256,8 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   SetUserOutputVariableName(Uov::SRC_ER_LAB, "src_er_lab");
   SetUserOutputVariableName(Uov::DIVFLX_ANG_LAB, "divflx_ang_lab");
   SetUserOutputVariableName(Uov::DIV_ER_ANG_LAB, "div_er_ang_lab");
+  SetUserOutputVariableName(Uov::TAU_PER_CELL, "tau_per_cell");
+  SetUserOutputVariableName(Uov::TAU_FACT, "tau_fact");
   return;
 }
 
@@ -292,7 +298,7 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
 
         uov(Uov::MDOT, k, j, i) = 4.0*PI*SQR(pcoord->x1v(i))*phydro->u(IM1,k,j,i);
 
-        Real press = (phydro->u(IEN,k,j,i) - 0.5*SQR(phydro->u(IM1,k,j,i)/rho)) * (gamma - 1.0);
+        Real press = (phydro->u(IEN,k,j,i) - 0.5*SQR(phydro->u(IM1,k,j,i))/rho) * (gamma - 1.0);
         uov(Uov::CSOUND,k,j,i) = (std::sqrt(press / rho));
 
         uov(Uov::DIVFLX,k,j,i) = 0.0;
@@ -321,6 +327,9 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
           uov(Uov::DIVFLX_ANG_LAB,k,j,i) += ruser_meshblock_data[14](k,j,i,n);
           uov(Uov::DIV_ER_ANG_LAB,k,j,i) += ruser_meshblock_data[15](k,j,i,n);
         }
+
+      uov(Uov::TAU_PER_CELL,k,j,i) = ruser_meshblock_data[16](k,j,i);
+      uov(Uov::TAU_FACT,k,j,i) = ruser_meshblock_data[17](k,j,i);
       }
     }
   }
@@ -433,7 +442,7 @@ void UserOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
 
           // Set all the matter-radiation coupling coefficients
           pnrrad->sigma_s(k, j, i, ifr) = rho * kappa_s;
-          pnrrad->sigma_a(k, j, i, ifr) = 0.0;
+          pnrrad->sigma_a(k, j, i, ifr) = absfact * rho * kappa_s;
           pnrrad->sigma_p(k, j, i, ifr) = rho * kappa_ff;
           pnrrad->sigma_pe(k, j, i, ifr) = rho * kappa_ff;
         }

@@ -83,12 +83,18 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
           Real taul = dxw1_(i-1) * sigmal;
           Real taur = dxw1_(i) * sigmar;
 
+          pmb->ruser_meshblock_data[16](k,j,i) = taur;
+
           Real f_l = 1.0;
           Real f_r = 1.0;
           taul *= taufact(k,j,i-1);
           taur *= taufact(k,j,i);
+
+          pmb->ruser_meshblock_data[17](k,j,i) = taul+taur;
+
           GetTaufactor(taul+taur,f_r,1);
           GetTaufactor(taul+taur,f_l,-1);
+
 
           Real *s1n = &(sfac1_x_(i,ifr*nang));
           Real *s2n = &(sfac2_x_(i,ifr*nang));

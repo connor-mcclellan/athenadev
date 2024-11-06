@@ -78,10 +78,15 @@ void RadIntegrator::FirstOrderFluxDivergenceCoef(const Real wght) {
           Real taul = dxw1_(i-1) * sigmal;
           Real taur = dxw1_(i) * sigmar;
 
+          pmb->ruser_meshblock_data[16](k,j,i) = taur;
+
           Real f_l = 1.0;
           Real f_r = 1.0;
           taul *= taufact(k,j,i-1);
           taur *= taufact(k,j,i);
+
+          pmb->ruser_meshblock_data[17](k,j,i) = taul+taur;
+
           // the choice of taufactor = sum of L and R cell optical depths is made after
           // many trial experiments, particularly to minimize artifacts when there is a
           // sharp opacity jump. other choices such as arithmetic and harmonic mean may
