@@ -52,7 +52,7 @@ namespace {
   Real rho0;      // Density
   Real r0;        // Length
 
-  Real scalefac;  // Scaling factor for solution
+  Real zerovelflag;  // Scaling factor for solution
   Real absfact; // Fraction of scattering opacity to use for absorption opacity
 
   // Coordinate information for user output variables
@@ -81,7 +81,7 @@ void FixedInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, Fac
 void VacuumOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
     Real time, Real dt, int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 
-//void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
+//void RestartVelocities(MeshBlock *pmb, const Real time, const Real dt,
 //              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
 //              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 //              AthenaArray<Real> &cons_scalar);
@@ -124,9 +124,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   vinflow = mdot/(4.*PI*dens_base*SQR(mesh_size.x1min));
 
-  scalefac = pin->GetReal("problem", "scalefac");
+  zerovelflag = pin->GetReal("problem", "zerovelflag");
   absfact = pin->GetReal("problem", "absfact");
-  printf("scale factor (MESH): %g\n", scalefac);
+  printf("velocity factor (MESH): %g\n", zerovelflag);
   printf("dens_base (MESH): %g\n", dens_base);
   printf("vinflow (MESH): %g\n", vinflow);
 
@@ -136,64 +136,54 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, VacuumOuterX1);
 
-  //EnrollUserExplicitSourceFunction(RestartRescale);
+  //EnrollUserExplicitSourceFunction(RestartVelocities);
   return;
 }
 
 
-//void RestartRescale(MeshBlock *pmb, const Real time, const Real dt,
-//                    const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-//                    const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-//                    AthenaArray<Real> &cons_scalar) {
-//
-//  int il = pmb->is-NGHOST;
-//  int iu = pmb->ie+NGHOST;
-//  int jl = pmb->js;
-//  int ju = pmb->je;
-//  int kl = pmb->ks;
-//  int ku = pmb->ke;
-//
-//  if (std::fabs(scalefac - 1.0) < TINY_NUMBER) { // Scale factor is 1
-//    return;
-//
-//  } else { // Scale factor other than 1
-//    printf("scale factor (MESHBLOCK): %g\n", scalefac);
-//
-//    dens_base *= scalefac;
-//    vinflow /= scalefac;
-//
-//    printf("dens_base (MESHBLOCK): %g\n", dens_base);
-//    printf("vinflow (MESHBLOCK): %g\n", vinflow);
-//
-//    for (int k = kl; k <= ku; k++) {
-//      for (int j = jl; j <= ju; j++) {
-//        for (int i = il; i <= iu; i++) {
-//
-//
-//          // Calculate the gas internal energy before the scaling
-//          Real rho_old = cons(IDN,k,j,i);
-//          printf("i=%03d --- density before:  %g\n", i, rho_old);
-//          Real kin_old = 0.5*SQR(cons(IM1,k,j,i))/rho_old;
-//          Real ein_old = cons(IEN,k,j,i)-kin_old;
-//
-//          // Scale the conserved variables
-//          cons(IDN,k,j,i) *= scalefac;
-//          Real rho_new = cons(IDN,k,j,i);
-//          printf("      --- density after:   %g\n", rho_new);
-//
-//          // Gas total energy after scaling
-//          Real kin_new = 0.5*SQR(cons(IM1,k,j,i))/rho_new;
-//          Real ein_new = cons(IEN,k,j,i)-kin_new;
-//          cons(IEN,k,j,i) = scalefac*(ein_old + kin_new);
-//        }
-//      }
-//    }
-//
-//    scalefac = 1.0;
-//    printf("scale factor (AFTER MESHBLOCK): %g\n", scalefac);
-//  }
-//  return;
-//}
+void MeshBlock::UserWorkInLoop() {
+
+  int il = is-NGHOST;
+  int iu = ie+NGHOST;
+  int jl = js;
+  int ju = je;
+  int kl = ks;
+  int ku = ke;
+
+  printf("RESTART VEL FACTOR: %g\n", zerovelflag);
+  if (std::fabs(zerovelflag - 1.0) < TINY_NUMBER) {
+    return;
+
+  } else { // Velocity factor other than 1
+    printf("Velocity factor (MESHBLOCK): %g\n", zerovelflag);
+
+    vinflow *= zerovelflag;
+    printf("vinflow (MESHBLOCK): %g\n", vinflow);
+
+    for (int k = kl; k <= ku; k++) {
+      for (int j = jl; j <= ju; j++) {
+        for (int i = il; i <= iu; i++) {
+
+          Real mom_old = phydro->u(IM1,k,j,i);
+
+          // Calculate the gas internal energy before the scaling
+          Real rho_old = phydro->u(IDN,k,j,i);
+          Real kin_old = 0.5*SQR(mom_old)/rho_old;
+          Real ein_old = phydro->u(IEN,k,j,i)-kin_old;
+
+          // Scale the conserved variables
+          phydro->u(IM1,k,j,i) *= zerovelflag;
+          phydro->w(IVX,k,j,i) *= zerovelflag;
+          Real mom_new = phydro->u(IM1,k,j,i);
+        }
+      }
+    }
+
+    zerovelflag = 1.0;
+    printf("Velocity factor (AFTER MESHBLOCK): %g\n", zerovelflag);
+  }
+  return;
+}
 
 
 void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
