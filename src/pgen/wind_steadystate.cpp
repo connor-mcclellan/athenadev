@@ -54,6 +54,7 @@ namespace {
 
   Real zerovelflag;  // Scaling factor for solution
   Real absfact; // Fraction of scattering opacity to use for absorption opacity
+  Real user_dt;
 
   // Coordinate information for user output variables
   AthenaArray<Real> x1area;
@@ -80,6 +81,14 @@ void FixedInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, Fac
 
 void VacuumOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
     Real time, Real dt, int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+
+Real ConstantTimestep(MeshBlock *pmb) {
+  if (user_dt > TINY_NUMBER) {
+    return user_dt;
+  } else {
+    return std::numeric_limits<Real>().max();
+  }
+}
 
 //void RestartVelocities(MeshBlock *pmb, const Real time, const Real dt,
 //              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
@@ -126,6 +135,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   zerovelflag = pin->GetReal("problem", "zerovelflag");
   absfact = pin->GetReal("problem", "absfact");
+  user_dt = pin->GetReal("problem", "user_dt");
+
   printf("velocity factor (MESH): %g\n", zerovelflag);
   printf("dens_base (MESH): %g\n", dens_base);
   printf("vinflow (MESH): %g\n", vinflow);
@@ -136,6 +147,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, VacuumOuterX1);
 
+  EnrollUserTimeStepFunction(ConstantTimestep);
   //EnrollUserExplicitSourceFunction(RestartVelocities);
   return;
 }
