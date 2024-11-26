@@ -2764,8 +2764,8 @@ TaskStatus TimeIntegratorTaskList::AddSourceTermsRad(MeshBlock *pmb, int stage) 
           }
 
       // BCM: Temporarily moved out of conditional to get user outputs when rad is decoupled
+      prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
       if (prad->set_source_flag > 0) {
-        prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
         prad->pradintegrator->AddSourceTerms(pmb, ph->u);
       }
     }
