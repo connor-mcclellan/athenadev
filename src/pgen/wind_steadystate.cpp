@@ -90,11 +90,6 @@ Real ConstantTimestep(MeshBlock *pmb) {
   }
 }
 
-//void RestartVelocities(MeshBlock *pmb, const Real time, const Real dt,
-//              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-//              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-//              AthenaArray<Real> &cons_scalar);
-
 //========================================================================================
 //! \fn void Mesh::InitUserMeshData(ParameterInput *pin)
 //  \brief Function to initialize problem-specific data in mesh class.  Can also be used
@@ -148,7 +143,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, VacuumOuterX1);
 
   EnrollUserTimeStepFunction(ConstantTimestep);
-  //EnrollUserExplicitSourceFunction(RestartVelocities);
   return;
 }
 
@@ -162,37 +156,27 @@ void MeshBlock::UserWorkInLoop() {
   int kl = ks;
   int ku = ke;
 
-  printf("RESTART VEL FACTOR: %g\n", zerovelflag);
-  if (std::fabs(zerovelflag - 1.0) < TINY_NUMBER) {
-    return;
+  for (int k = kl; k <= ku; k++) {
+    for (int j = jl; j <= ju; j++) {
+      for (int i = il+1; i <= iu-1; i++) {
 
-  } else { // Velocity factor other than 1
-    printf("Velocity factor (MESHBLOCK): %g\n", zerovelflag);
+        Real vell = phydro->u(IM1,k,j,i-1)/phydro->u(IDN,k,j,i-1);
+        Real velc = phydro->u(IM1,k,j,i)/phydro->u(IDN,k,j,i);
+        Real velr = phydro->u(IM1,k,j,i+1)/phydro->u(IDN,k,j,i+1);
 
-    vinflow *= zerovelflag;
-    printf("vinflow (MESHBLOCK): %g\n", vinflow);
+        Real vel_avg = (vell + velc + velr) / 3.;
 
-    for (int k = kl; k <= ku; k++) {
-      for (int j = jl; j <= ju; j++) {
-        for (int i = il; i <= iu; i++) {
-
-          Real mom_old = phydro->u(IM1,k,j,i);
-
-          // Calculate the gas internal energy before the scaling
-          Real rho_old = phydro->u(IDN,k,j,i);
-          Real kin_old = 0.5*SQR(mom_old)/rho_old;
-          Real ein_old = phydro->u(IEN,k,j,i)-kin_old;
-
-          // Scale the conserved variables
-          phydro->u(IM1,k,j,i) *= zerovelflag;
-          phydro->w(IVX,k,j,i) *= zerovelflag;
-          Real mom_new = phydro->u(IM1,k,j,i);
-        }
+        // Overwrite the primitive and conserved variables
+        phydro->w(IVX,k,j,i) = vel_avg;
+        phydro->u(IM1,k,j,i) = vel_avg * phydro->u(IDN,k,j,i); //NOTE:
+                                                               // Just averaging the velocity and not
+                                                               // the momentum means this is no longer
+                                                               // conservative. Ex. if the average velocity
+                                                               // is higher than the center cell and we don't
+                                                               // change the density as well, we create
+                                                               // momentum
       }
     }
-
-    zerovelflag = 1.0;
-    printf("Velocity factor (AFTER MESHBLOCK): %g\n", zerovelflag);
   }
   return;
 }
